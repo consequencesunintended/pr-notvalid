@@ -30,7 +30,7 @@ def getEncodedPrompt(prompt):
                 max_length=tokenizer.model_max_length,
                 truncation=True,
                 return_tensors="pt",
-            ).input_ids.to("cuda")
+            ).input_ids
 
 class CustomDataset(IterableDataset):
     def __init__(self, dataset, transform_image=None, transform_image_seg = None):
