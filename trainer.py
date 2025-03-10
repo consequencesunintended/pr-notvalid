@@ -19,12 +19,15 @@ from torch.optim.lr_scheduler import LinearLR
 from hfdataset import load_hf_dataset
 from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import DistributedDataParallelKwargs
+import multiprocessing
 
 MODEL_DIR = "/stable_diffusion_21"
 
 class Trainer:
 
     def train(self):
+
+        multiprocessing.set_start_method("spawn", force=True)
 
         ddp_kwargs = DistributedDataParallelKwargs()
 
