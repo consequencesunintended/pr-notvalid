@@ -20,6 +20,7 @@ from hfdataset import load_hf_dataset
 from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import DistributedDataParallelKwargs
 import multiprocessing
+from PIL import Image
 
 MODEL_DIR = "/stable_diffusion_21"
 
@@ -168,9 +169,13 @@ class Trainer:
               optimizer.step()
               optimizer.zero_grad()
 
-            if self.accelerator.sync_gradients:
+            if self.accelerator.sync_gradients and self.accelerator.is_local_main_process:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
                 average_loss = running_loss / gradient_accumulation_steps
                 print(f'loss:{average_loss}')
                 running_loss = 0.0  
 
+                predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
+                image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
+                im = Image.fromarray(image_np)
+                im.save(f'/root/output/my_image_{actual_step}.png')
