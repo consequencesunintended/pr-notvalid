@@ -44,7 +44,7 @@ class Trainer:
         num_gpus = self.accelerator.num_processes
 
         # Desired effective batch size
-        desired_effective_batch_size = 16
+        desired_effective_batch_size = 128
 
         # Assuming each GPU gets one item per step
         local_batch_size = 1
