@@ -177,5 +177,6 @@ class Trainer:
 
                 predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
                 image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
+                image_np = (image_np * 255).astype(np.uint8)
                 im = Image.fromarray(image_np)
                 im.save(f'/root/output/my_image_{i}.png')
