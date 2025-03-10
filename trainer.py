@@ -119,8 +119,6 @@ class Trainer:
         self.model = unet
 
         for epoch in range(0, 1):
-          
-          running_loss = 0.0  
 
           for i, batch in enumerate(data_loader):
 
@@ -170,7 +168,6 @@ class Trainer:
               weights = random_prob.squeeze()
               weighted_loss = weights * predicted_annotation_loss + (1 - weights) * image_reconstructed_loss
               loss = weighted_loss.mean()
-              running_loss += loss.item()  
 
               self.accelerator.backward(loss)
 
@@ -185,12 +182,11 @@ class Trainer:
 
                 if self.accelerator.is_local_main_process:
                     print(f'loss:{reduced_loss}', flush=True)
-                running_loss = 0.0  
 
-                predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
-                image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
-                image_np = (image_np * 255).astype(np.uint8)
-                im = Image.fromarray(image_np)
-                output_dir = "/root/output/images"
-                os.makedirs(output_dir, exist_ok=True)
-                im.save(f'{output_dir}/my_image_{i}.png')
+                    predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
+                    image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
+                    image_np = (image_np * 255).astype(np.uint8)
+                    im = Image.fromarray(image_np)
+                    output_dir = "/root/output/images"
+                    os.makedirs(output_dir, exist_ok=True)
+                    im.save(f'{output_dir}/my_image_{i}.png')
