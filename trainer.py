@@ -182,7 +182,7 @@ class Trainer:
             if self.accelerator.sync_gradients:
                 
                 average_loss = running_loss / gradient_accumulation_steps
-                self.accelerator.print(f'loss:{average_loss}')
+                print(f'loss:{average_loss}', flush=True)
                 running_loss = 0.0  
 
                 predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
