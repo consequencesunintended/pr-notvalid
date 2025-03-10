@@ -182,4 +182,4 @@ class Trainer:
                 im = Image.fromarray(image_np)
                 output_dir = "/root/output/images"
                 os.makedirs(output_dir, exist_ok=True)
-                im.save(f'{output_dir}my_image_{i}.png')
+                im.save(f'{output_dir}/my_image_{i}.png')
