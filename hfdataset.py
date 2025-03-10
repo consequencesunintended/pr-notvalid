@@ -40,8 +40,9 @@ class CustomDataset(IterableDataset):
     def __len__(self):
         return self.dataset.info.splits["train"].num_examples
 
-    def __getattr__(self, name):
-        return getattr(self.dataset, name)
+    @property
+    def num_shards(self):
+        return self.dataset.num_shards
 
     def __iter__(self):
         for item in self.dataset:
