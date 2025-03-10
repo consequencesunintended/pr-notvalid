@@ -178,4 +178,4 @@ class Trainer:
                 predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
                 image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
                 im = Image.fromarray(image_np)
-                im.save(f'/root/output/my_image_{actual_step}.png')
+                im.save(f'/root/output/my_image_{i}.png')
