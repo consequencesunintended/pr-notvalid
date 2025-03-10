@@ -27,7 +27,6 @@ MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 class Trainer:
 
     def train(self):
-
         multiprocessing.set_start_method("spawn", force=True)
 
         ddp_kwargs = DistributedDataParallelKwargs()
@@ -38,20 +37,29 @@ class Trainer:
             split_batches=False,
         )
 
+        # Initialize Accelerator
+        accelerator = Accelerator()
+
+        # Number of GPUs or processes
+        num_gpus = accelerator.num_processes
+
+        # Desired effective batch size
+        desired_effective_batch_size = 128
+
         # Assuming each GPU gets one item per step
         local_batch_size = 1
 
         # Compute gradient accumulation steps dynamically
-        gradient_accumulation_steps = 128
+        gradient_accumulation_steps = desired_effective_batch_size // (num_gpus * local_batch_size)
 
         # Now, initialize your Accelerator with the computed gradient_accumulation_steps
-        self.accelerator = Accelerator(
+        accelerator = Accelerator(
             dataloader_config=dataloader_config,
             kwargs_handlers=[ddp_kwargs],
             gradient_accumulation_steps=gradient_accumulation_steps,
         )
+        print(f"Using {num_gpus} GPUs with gradient_accumulation_steps set to {gradient_accumulation_steps}")
 
-        print(f"gradient_accumulation_steps set to {gradient_accumulation_steps}")
 
         noise_scheduler = DDIMScheduler.from_pretrained(MODEL_ID, subfolder="scheduler")
         tokenizer = CLIPTokenizer.from_pretrained(
