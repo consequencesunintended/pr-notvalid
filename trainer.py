@@ -179,10 +179,10 @@ class Trainer:
               optimizer.step()
               optimizer.zero_grad()
 
-            if self.accelerator.sync_gradients:
+            if self.accelerator.sync_gradients and self.accelerator.is_local_main_process:
                 
-                average_loss = running_loss / gradient_accumulation_steps
-                print(f'loss:{average_loss}', flush=True)
+                reduced_loss = self.accelerator.reduce(loss, reduction="mean")
+                print(f'loss:{reduced_loss}', flush=True)
                 running_loss = 0.0  
 
                 predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
