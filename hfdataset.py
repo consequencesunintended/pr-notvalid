@@ -68,7 +68,8 @@ class CustomDataset(IterableDataset):
 
 
 
-def load_hf_dataset():
-    train_dataset = CustomDataset(load_dataset("wangherr/coco2017_caption_depth", split="train", streaming=True).with_format("torch"))
+def load_hf_dataset(num_processes, process_index):
+    train_dataset = CustomDataset(load_dataset("wangherr/coco2017_caption_depth", split="train", streaming=True).shard(num_processes, process_index).with_format("torch"))
+    print(process_index)
 
     return train_dataset

@@ -67,7 +67,7 @@ class Trainer:
             MODEL_ID, subfolder="unet", revision=None
         ).to("cuda")
         
-        train_dataset = load_hf_dataset()
+        train_dataset = load_hf_dataset(self.accelerator.num_processes, self.accelerator.process_index)
 
         data_loader = DataLoader(train_dataset, 
                                 batch_size=local_batch_size,
