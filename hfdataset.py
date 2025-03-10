@@ -40,6 +40,9 @@ class CustomDataset(IterableDataset):
     def __len__(self):
         return self.dataset.info.splits["train"].num_examples
 
+    def __getattr__(self, name):
+        return getattr(self.dataset, name)
+
     def __iter__(self):
         for item in self.dataset:
             image = item["image"]
