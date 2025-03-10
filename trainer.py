@@ -170,7 +170,6 @@ class Trainer:
               weights = random_prob.squeeze()
               weighted_loss = weights * predicted_annotation_loss + (1 - weights) * image_reconstructed_loss
               loss = weighted_loss.mean()
-              running_loss += loss.item()  
 
               self.accelerator.backward(loss)
 
@@ -179,9 +178,8 @@ class Trainer:
 
             if self.accelerator.sync_gradients and self.accelerator.is_local_main_process:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
-                average_loss = running_loss / gradient_accumulation_steps
-                print(f'loss:{average_loss}')
-                running_loss = 0.0  
+                reduced_loss = self.accelerator.reduce(loss, reduction="mean")
+                print(f'loss:{reduced_loss}')
 
                 predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
                 image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
