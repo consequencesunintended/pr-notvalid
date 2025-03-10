@@ -179,4 +179,6 @@ class Trainer:
                 image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
                 image_np = (image_np * 255).astype(np.uint8)
                 im = Image.fromarray(image_np)
-                im.save(f'/root/output/my_image_{i}.png')
+                output_dir = "/root/output/images"
+                os.makedirs(output_dir, exist_ok=True)
+                im.save(f'{output_dir}my_image_{i}.png')
