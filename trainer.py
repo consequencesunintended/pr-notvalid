@@ -23,7 +23,7 @@ from accelerate.utils import DistributedDataParallelKwargs
 import multiprocessing
 from PIL import Image
 
-MODEL_DIR = "/stable_diffusion_21"
+MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
 class Trainer:
 
@@ -54,18 +54,18 @@ class Trainer:
 
         print(f"gradient_accumulation_steps set to {gradient_accumulation_steps}")
 
-        noise_scheduler = DDIMScheduler.from_pretrained(MODEL_DIR, subfolder="scheduler")
+        noise_scheduler = DDIMScheduler.from_pretrained(MODEL_ID, subfolder="scheduler")
         tokenizer = CLIPTokenizer.from_pretrained(
-            MODEL_DIR, subfolder="tokenizer", revision=None
+            MODEL_ID, subfolder="tokenizer", revision=None
         )
         text_encoder = CLIPTextModel.from_pretrained(
-            MODEL_DIR, subfolder="text_encoder", revision=None
+            MODEL_ID, subfolder="text_encoder", revision=None
         ).to("cuda")
         vae = AutoencoderKL.from_pretrained(
-            MODEL_DIR, subfolder="vae", revision=None
+            MODEL_ID, subfolder="vae", revision=None
         ).to("cuda")
         unet = UNet2DConditionModel.from_pretrained(
-            MODEL_DIR, subfolder="unet", revision=None
+            MODEL_ID, subfolder="unet", revision=None
         ).to("cuda")
         
         train_dataset = load_hf_dataset()

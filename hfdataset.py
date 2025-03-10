@@ -17,10 +17,10 @@ import torchvision.transforms.functional as F
 import matplotlib.pyplot as plt
 from torch.optim.lr_scheduler import LinearLR
 
-MODEL_DIR = "/stable_diffusion_21"
+MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
 tokenizer = CLIPTokenizer.from_pretrained(
-    MODEL_DIR, subfolder="tokenizer", revision=None
+    MODEL_ID, subfolder="tokenizer", revision=None
 )
 
 def getEncodedPrompt(prompt):
