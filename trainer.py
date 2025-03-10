@@ -38,10 +38,10 @@ class Trainer:
         )
 
         # Initialize Accelerator
-        accelerator = Accelerator()
+        self.accelerator = Accelerator()
 
         # Number of GPUs or processes
-        num_gpus = accelerator.num_processes
+        num_gpus = self.accelerator.num_processes
 
         # Desired effective batch size
         desired_effective_batch_size = 128
@@ -53,7 +53,7 @@ class Trainer:
         gradient_accumulation_steps = desired_effective_batch_size // (num_gpus * local_batch_size)
 
         # Now, initialize your Accelerator with the computed gradient_accumulation_steps
-        accelerator = Accelerator(
+        self.accelerator = Accelerator(
             dataloader_config=dataloader_config,
             kwargs_handlers=[ddp_kwargs],
             gradient_accumulation_steps=gradient_accumulation_steps,
