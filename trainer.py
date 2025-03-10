@@ -71,7 +71,7 @@ class Trainer:
 
         data_loader = DataLoader(train_dataset, 
                                 batch_size=local_batch_size,
-                                num_workers=2,
+                                num_workers=min(train_dataset.num_shards,2),
                                 pin_memory=True,
                                 persistent_workers=True,)
 
