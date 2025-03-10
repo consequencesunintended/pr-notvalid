@@ -174,11 +174,13 @@ class Trainer:
 
               self.accelerator.backward(loss)
 
+              if self.accelerator.sync_gradients:
+                self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
               optimizer.step()
               optimizer.zero_grad()
 
-            if self.accelerator.sync_gradients and self.accelerator.is_local_main_process:
-                self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
+            if self.accelerator.sync_gradients:
+                
                 average_loss = running_loss / gradient_accumulation_steps
                 print(f'loss:{average_loss}')
                 running_loss = 0.0  
