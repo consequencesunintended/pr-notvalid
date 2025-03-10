@@ -65,7 +65,11 @@ class Trainer:
         
         train_dataset = load_hf_dataset()
 
-        data_loader = DataLoader(train_dataset, batch_size=local_batch_size)
+        data_loader = DataLoader(train_dataset, 
+                                batch_size=local_batch_size,
+                                num_workers=2,
+                                pin_memory=True,
+                                persistent_workers=True,)
 
         prompt = ""
         uncond_tokens = ""
