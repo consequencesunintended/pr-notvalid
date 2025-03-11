@@ -100,7 +100,8 @@ class Trainer:
         text_encoder.requires_grad_(False)
         unet.train()
 
-        print("sure")
+        if self.accelerator.is_local_main_process:
+            print("Data Prepared!")
 
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
