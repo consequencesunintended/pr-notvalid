@@ -183,6 +183,6 @@ class Trainer:
                     im.save(f'{output_dir}/my_image_{i}.png')
 
             if i == max_num_step:
-                brea   
+                break   
     
         self.accelerator.end_training()
