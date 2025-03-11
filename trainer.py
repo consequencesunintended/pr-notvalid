@@ -17,7 +17,7 @@ MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 class Trainer:
 
     def train(self):
-        multiprocessing.set_start_method("spawn", force=True)
+        # multiprocessing.set_start_method("spawn", force=True)
 
         ddp_kwargs = DistributedDataParallelKwargs()
 
@@ -68,10 +68,7 @@ class Trainer:
         train_dataset = load_hf_dataset(self.accelerator.num_processes, self.accelerator.process_index)
 
         data_loader = DataLoader(train_dataset, 
-                                batch_size=local_batch_size,
-                                num_workers=min(train_dataset.num_shards,2),
-                                pin_memory=True,
-                                persistent_workers=True,)
+                                batch_size=local_batch_size)
 
         prompt = ""
         uncond_tokens = ""
