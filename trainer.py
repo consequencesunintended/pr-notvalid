@@ -110,9 +110,11 @@ class Trainer:
         self.model = unet
 
         for epoch in range(0, 2):
+
+          self.accelerator.wait_for_everyone()
           gc.collect()
           torch.cuda.empty_cache()
-          
+
           for i, batch in enumerate(data_loader):
 
             with self.accelerator.accumulate(self.model):
