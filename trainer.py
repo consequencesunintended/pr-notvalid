@@ -68,7 +68,10 @@ class Trainer:
         train_dataset = load_hf_dataset(self.accelerator.num_processes, self.accelerator.process_index)
 
         data_loader = DataLoader(train_dataset, 
-                                batch_size=local_batch_size)
+                                batch_size=local_batch_size,
+                                num_workers=min(train_dataset.num_shards,2),
+                                pin_memory=True,
+                                persistent_workers=True,)
 
         prompt = ""
         uncond_tokens = ""
@@ -164,14 +167,13 @@ class Trainer:
               optimizer.step()
               optimizer.zero_grad()
 
-            if self.accelerator.sync_gradients:
 
-                if self.accelerator.is_local_main_process:
-                    print(i)
-                
+            print(f'{self.accelerator.process_index} managed {i}/n')
+
+            if self.accelerator.sync_gradients:                
                 reduced_loss = self.accelerator.reduce(loss, reduction="mean")
 
-                if self.accelerator.is_local_main_process:
+                if self.accelerator.is_main_process:
                     print(f'loss:{reduced_loss}', flush=True)
 
                     predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
@@ -181,8 +183,6 @@ class Trainer:
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
-
-                    if i == 1151:
-                        continue
+                    
         
         self.accelerator.end_training()
