@@ -183,4 +183,4 @@ class Trainer:
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
         
-    self.accelerator.end_training()
+        self.accelerator.end_training()
