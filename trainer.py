@@ -11,6 +11,8 @@ from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import DistributedDataParallelKwargs
 import multiprocessing
 from PIL import Image
+import torch.distributed as dist
+
 
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
@@ -184,3 +186,6 @@ class Trainer:
                 #     output_dir = "/root/output/images"
                 #     os.makedirs(output_dir, exist_ok=True)
                 #     im.save(f'{output_dir}/my_image_{i}.png')
+
+    if dist.is_initialized():
+        dist.destroy_process_group()
