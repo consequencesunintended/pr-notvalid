@@ -168,7 +168,9 @@ class Trainer:
             #   optimizer.zero_grad()
 
             if self.accelerator.sync_gradients:
-                print(i)
+
+                if self.accelerator.is_local_main_process:
+                    print(i)
                 
                 # reduced_loss = self.accelerator.reduce(loss, reduction="mean")
 
