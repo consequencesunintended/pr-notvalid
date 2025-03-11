@@ -107,16 +107,20 @@ class Trainer:
 
         unet, vae, optimizer, data_loader = self.accelerator.prepare(unet, vae, optimizer, data_loader)
 
+        def cycle(loader):
+            while True:
+                for batch in loader:
+                    yield batch
+
         self.model = unet
 
         for epoch in range(0, 2):
 
           self.accelerator.wait_for_everyone()
 
-          for i, batch in enumerate(data_loader):
+          for i, batch in enumerate(cycle(data_loader)):
 
             with self.accelerator.accumulate(self.model):
-
 
               with torch.no_grad():
                   image = batch["image"].to("cuda")
