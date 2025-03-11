@@ -11,8 +11,6 @@ from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import DistributedDataParallelKwargs
 import multiprocessing
 from PIL import Image
-import torch.distributed as dist
-
 
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
@@ -187,6 +185,3 @@ class Trainer:
         
         gc.collect()
         torch.cuda.empty_cache()
-        
-    if dist.is_initialized():
-        dist.destroy_process_group()
