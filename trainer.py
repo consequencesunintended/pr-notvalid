@@ -184,5 +184,8 @@ class Trainer:
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
+
+                    if i == 1151:
+                        continue
         
         self.accelerator.end_training()
