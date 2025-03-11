@@ -47,7 +47,7 @@ class Trainer:
         desired_effective_batch_size = 128
 
         # Assuming each GPU gets one item per step
-        local_batch_size = 3
+        local_batch_size = 2
 
         # Compute gradient accumulation steps dynamically
         gradient_accumulation_steps = desired_effective_batch_size // (num_gpus * local_batch_size)
