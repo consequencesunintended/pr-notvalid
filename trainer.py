@@ -113,7 +113,7 @@ class Trainer:
                     yield batch
 
         self.model = unet
-        max_num_step = 14_000
+        max_num_step = 4_000
 
         for i, batch in enumerate(cycle(data_loader)):
 
