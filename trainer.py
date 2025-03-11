@@ -172,7 +172,7 @@ class Trainer:
               optimizer.zero_grad()
 
 
-            print(f'{self.accelerator.process_index} managed {i}/n')
+            print(f'{self.accelerator.process_index} managed {i}\n')
 
             if self.accelerator.sync_gradients:                
                 reduced_loss = self.accelerator.reduce(loss, reduction="mean")
