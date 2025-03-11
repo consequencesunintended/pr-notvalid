@@ -183,5 +183,4 @@ class Trainer:
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
         
-        gc.collect()
-        torch.cuda.empty_cache()
+    self.accelerator.end_training()
