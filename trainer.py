@@ -117,8 +117,8 @@ class Trainer:
 
             # with self.accelerator.accumulate(self.model):
 
-            #   gc.collect()
-            #   torch.cuda.empty_cache()
+            gc.collect()
+            torch.cuda.empty_cache()
 
             #   with torch.no_grad():
             #       image = batch["image"].to("cuda")
