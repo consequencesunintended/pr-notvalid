@@ -17,7 +17,7 @@ MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 class Trainer:
 
     def train(self):
-        # multiprocessing.set_start_method("spawn", force=True)
+        multiprocessing.set_start_method("spawn", force=True)
 
         ddp_kwargs = DistributedDataParallelKwargs()
 
