@@ -3,6 +3,7 @@ from torch.utils.data import IterableDataset
 import torch
 from datasets import load_dataset
 import torchvision.transforms.functional as F
+import random
 
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
@@ -62,7 +63,8 @@ class CustomDataset(IterableDataset):
 
 def load_hf_dataset(num_processes, process_index):
     train_dataset = CustomDataset(load_dataset("wangherr/coco2017_caption_depth", split="train", streaming=True).shard(num_processes, process_index).with_format("torch"))
+    shuffled_dataset = train_dataset.shuffle(buffer_size=10_000, seed=random.randint(0, 1_000_000))
     print(num_processes)
     print(process_index)
 
-    return train_dataset
+    return shuffled_dataset
