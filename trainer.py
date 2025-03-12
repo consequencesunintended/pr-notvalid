@@ -11,6 +11,7 @@ from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import DistributedDataParallelKwargs
 import multiprocessing
 from PIL import Image
+from transformers import get_cosine_schedule_with_warmup
 
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
@@ -105,7 +106,16 @@ class Trainer:
 
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
-        unet, vae, optimizer, data_loader = self.accelerator.prepare(unet, vae, optimizer, data_loader)
+        num_training_steps = 4_000
+        num_warmup_steps = 500
+
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer=optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_training_steps
+        )
+
+        unet, vae, optimizer, data_loader, scheduler = self.accelerator.prepare(unet, vae, optimizer, data_loader, scheduler)
 
         def cycle(loader):
             while True:
@@ -113,11 +123,10 @@ class Trainer:
                     yield batch
 
         self.model = unet
-        max_num_step = 4_000
 
         for i, batch in enumerate(cycle(data_loader)):
 
-            if i == max_num_step:
+            if i == num_training_steps:
                 break   
 
             with self.accelerator.accumulate(self.model):
@@ -168,8 +177,10 @@ class Trainer:
 
                 if self.accelerator.sync_gradients:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
-                    optimizer.step()
-                    optimizer.zero_grad()
+                    
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
 
             if self.accelerator.sync_gradients:                
                 reduced_loss = self.accelerator.reduce(loss, reduction="mean")
