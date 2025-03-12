@@ -106,7 +106,7 @@ class Trainer:
 
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
-        num_training_steps = 4_000
+        num_training_steps = 10_000
         num_warmup_steps = 500
 
         scheduler = get_cosine_schedule_with_warmup(
@@ -117,17 +117,20 @@ class Trainer:
 
         unet, vae, optimizer, data_loader, scheduler = self.accelerator.prepare(unet, vae, optimizer, data_loader, scheduler)
 
-        def cycle(loader):
+        force_stop = False
+
+        def cycle(loader, force_stop):
             while True:
                 for batch in loader:
+                    if force_stop:
+                        break
                     yield batch
+                if force_stop:
+                    break
 
         self.model = unet
 
-        for i, batch in enumerate(cycle(data_loader)):
-
-            if i == num_training_steps:
-                break   
+        for i, batch in enumerate(cycle(data_loader, force_stop)):
 
             with self.accelerator.accumulate(self.model):
 
@@ -195,6 +198,9 @@ class Trainer:
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
+
+            if i == num_training_steps:
+                False   
 
     
         self.accelerator.end_training()
