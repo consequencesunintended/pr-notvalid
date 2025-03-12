@@ -117,6 +117,9 @@ class Trainer:
 
         for i, batch in enumerate(cycle(data_loader)):
 
+            if i == max_num_step:
+                break   
+
             with self.accelerator.accumulate(self.model):
 
                 with torch.no_grad():
@@ -182,7 +185,5 @@ class Trainer:
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
 
-            if i == max_num_step:
-                break   
     
         self.accelerator.end_training()
