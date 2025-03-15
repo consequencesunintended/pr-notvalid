@@ -137,6 +137,8 @@ class Trainer:
                 with torch.no_grad():
                     image = batch["image"].to("cuda")
                     depth_image = batch["image_depth"].to("cuda")
+                    mask = batch["mask"].to("cuda")            # (bsz, H, W)
+                    mask = mask.unsqueeze(1)                     # (bsz, 1, H, W) to broadcast over channels
 
                     x_0 = vae.encode(image).latent_dist.sample()
                     x_0 = x_0 * vae.config.scaling_factor
@@ -169,11 +171,17 @@ class Trainer:
 
                 image_reconstructed = vae.decode(image_reconstructed_latents / vae.config.scaling_factor, return_dict=False)[0]
 
-                predicted_annotation_loss = F1.mse_loss(predicted_annotation, depth_image, reduction="mean")
-                image_reconstructed_loss = F1.mse_loss(image_reconstructed, image, reduction="mean")
+                # Compute per-pixel MSE losses without reduction
+                loss_pred_pixel = F1.mse_loss(predicted_annotation, depth_image, reduction="none")
+                loss_recon_pixel = F1.mse_loss(image_reconstructed, image, reduction="none")
 
-                weights = random_prob.squeeze()
-                weighted_loss = weights * predicted_annotation_loss + (1 - weights) * image_reconstructed_loss
+                # Now compute the loss per sample: sum over channels and spatial dimensions, then normalize by the valid pixel count.
+                bsz = predicted_annotation.shape[0]
+                loss_pred_per_sample = (loss_pred_pixel * mask).view(bsz, -1).sum(dim=1) / mask.view(bsz, -1).sum(dim=1)
+                loss_recon_per_sample = (loss_recon_pixel * mask).view(bsz, -1).sum(dim=1) / mask.view(bsz, -1).sum(dim=1)
+
+                # Combine the losses with your weights
+                weighted_loss = weights * loss_pred_per_sample + (1 - weights) * loss_recon_per_sample
                 loss = weighted_loss.mean()
 
                 self.accelerator.backward(loss)
