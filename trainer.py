@@ -136,6 +136,10 @@ class Trainer:
 
                 with torch.no_grad():
                     image = batch["image"].to("cuda")
+                    image_mask = torch.isfinite(image)
+                    # Replace non-finite (e.g. inf) values with -1.0 so that the model gets a valid input
+                    image = torch.where(image_mask, image, torch.full_like(image, -1.0))
+                    
                     depth_image = batch["image_depth"].to("cuda")
 
                     x_0 = vae.encode(image).latent_dist.sample()
@@ -177,7 +181,7 @@ class Trainer:
 
                 # Apply the mask to the loss values and compute the mean over only valid pixels.
                 predicted_annotation_loss = loss_values[valid_mask].mean()
-                
+
                 image_reconstructed_loss = F1.mse_loss(image_reconstructed, image, reduction="mean")
 
                 weights = random_prob.squeeze()
