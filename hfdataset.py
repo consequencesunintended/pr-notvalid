@@ -76,7 +76,7 @@ class CustomDataset(IterableDataset):
             # For image: Convert from H x W x C to C x H x W
             image_tensor = torch.from_numpy(image).permute(2, 0, 1)
             # For depth: Add a channel dimension to convert from H x W to 1 x H x W
-            depth_tensor = torch.from_numpy(image_depth).unsqueeze(0)
+            depth_tensor = torch.from_numpy(image_depth).unsqueeze(0).repeat(3, 1, 1)
 
             # Apply random horizontal flip
             if torch.rand(1) < 0.5:
