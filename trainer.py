@@ -104,7 +104,7 @@ class Trainer:
         if self.accelerator.is_local_main_process:
             print("Data Prepared!")
 
-        optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
+        optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-10)
 
         num_training_steps = 10_000
         num_warmup_steps = 500
