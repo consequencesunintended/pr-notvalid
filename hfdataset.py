@@ -1,24 +1,11 @@
-from transformers import CLIPTokenizer
 from torch.utils.data import IterableDataset
 import torch
 from datasets import load_dataset
 import torchvision.transforms.functional as F
 import random
-
-MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
-
-tokenizer = CLIPTokenizer.from_pretrained(
-    MODEL_ID, subfolder="tokenizer", revision=None
-)
-
-def getEncodedPrompt(prompt):
-    return tokenizer(
-                prompt,
-                padding="max_length",
-                max_length=tokenizer.model_max_length,
-                truncation=True,
-                return_tensors="pt",
-            ).input_ids
+import io
+import h5py
+import numpy as np
 
 class CustomDataset(IterableDataset):
     def __init__(self, dataset, transform_image=None, transform_image_seg = None):
@@ -33,36 +20,90 @@ class CustomDataset(IterableDataset):
     def num_shards(self):
         return self.dataset.num_shards
 
+    def __tone_map_color(self, item):
+        with h5py.File(io.BytesIO(item['color.hdf5']), 'r') as f:
+            rgb = f["dataset"][:].astype(np.float32)
+
+        brightness = 0.3 * rgb[:, :, 0] + 0.59 * rgb[:, :, 1] + 0.11 * rgb[:, :, 2]
+
+        p90 = np.percentile(brightness, 90)
+
+        brightness_target = 0.8
+        eps = 1e-4
+        scale = np.power(brightness_target, 2.2) / p90 if p90 > eps else 1.0
+
+        rgb_tone = np.power(np.maximum(scale * rgb, 0), 1/2.2)
+        rgb_tone = np.clip(rgb_tone, 0, 1)
+        return rgb_tone
+
+    def __normalize_depth(self, item):
+        with h5py.File(io.BytesIO(item['depth_meters.hdf5']), 'r') as f:
+            depth = f["dataset"][:].astype(np.float32)
+
+        min_depth = np.nanmin(depth)
+        max_depth = np.nanmax(depth)
+        eps = 1e-4
+
+        if (max_depth - min_depth) < eps:
+            normalized_depth = np.zeros_like(depth)
+            normalized_depth[np.isnan(depth)] = np.nan
+        else:
+            normalized_depth = (depth - min_depth) / (max_depth - min_depth)
+
+        # # Directly map [0,1] -> [-1,1]
+        # normalized_depth = normalized_depth * 2 - 1
+        return normalized_depth
+
+
     def __iter__(self):
         for item in self.dataset:
-            image = item["image"]
-            image_depth = item['conditioning_image']
+            image = self.__tone_map_color(item)
+            image_depth = self.__normalize_depth(item)
 
-            # Random horizontal flip (manually deciding based on probability)
-            float_image = image.float().div(255.0)
-            float_depth = image_depth.float().div(255.0)
-
-            if torch.rand(1) < 0.5:
-                flipped_image = F.hflip(float_image)
-                flipped_depth = F.hflip(float_depth)
+            # --- Random crop of 512x512 ---
+            crop_h, crop_w = 512, 512
+            H, W, _ = image.shape  # Assuming image shape is (height, width, channels)
+            if H >= crop_h and W >= crop_w:
+                top = random.randint(0, H - crop_h)
+                left = random.randint(0, W - crop_w)
+                image = image[top:top+crop_h, left:left+crop_w, :]
+                image_depth = image_depth[top:top+crop_h, left:left+crop_w]
             else:
-                flipped_image = float_image
-                flipped_depth = float_depth
+                raise ValueError("Image size is smaller than the crop size.")
+                
 
-            # Normalize
-            normalised_image = F.normalize(flipped_image, [0.5], [0.5])
+            # Convert numpy arrays to torch tensors
+            # For image: Convert from H x W x C to C x H x W
+            image_tensor = torch.from_numpy(image).permute(2, 0, 1)
+            # For depth: Add a channel dimension to convert from H x W to 1 x H x W
+            depth_tensor = torch.from_numpy(image_depth).unsqueeze(0)
+
+            # Apply random horizontal flip
+            if torch.rand(1) < 0.5:
+                flipped_image = F.hflip(image_tensor)
+                flipped_depth = F.hflip(depth_tensor)
+            else:
+                flipped_image = image_tensor
+                flipped_depth = depth_tensor
+
+            # Normalize the tensors; adjust the mean and std for image channels
+            normalised_image = F.normalize(flipped_image, [0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             normalised_depth = F.normalize(flipped_depth, [0.5], [0.5])
+
+            # Set up the encoded prompt as before
+            encoded_none_prompt = torch.zeros([1, 77], dtype=torch.long)
+            encoded_none_prompt[0, 0] = 49406
+            encoded_none_prompt[0, 1] = 49407
 
             yield {
                 "image": normalised_image,
-                "image_depth" : normalised_depth,
-                "input_ids": getEncodedPrompt(""),
+                "image_depth": normalised_depth,
+                "input_ids": encoded_none_prompt,
             }
 
 
-
 def load_hf_dataset(num_processes, process_index):
-    ds_shard = load_dataset("wangherr/coco2017_caption_depth", split="train", streaming=True).shard(num_processes, process_index)
+    ds_shard = load_dataset("alexnasa/ml-hypersim-depthonly", split="train", streaming=True).shard(num_processes, process_index)
     train_dataset = CustomDataset(ds_shard.with_format("torch"))
     
     return train_dataset
