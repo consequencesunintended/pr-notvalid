@@ -181,6 +181,7 @@ class Trainer:
                 loss_recon_per_sample = (loss_recon_pixel * mask).view(bsz, -1).sum(dim=1) / mask.view(bsz, -1).sum(dim=1)
 
                 # Combine the losses with your weights
+                weights = random_prob.squeeze()
                 weighted_loss = weights * loss_pred_per_sample + (1 - weights) * loss_recon_per_sample
                 loss = weighted_loss.mean()
 
