@@ -91,24 +91,30 @@ class CustomDataset(IterableDataset):
             invalid_image = np.isnan(image).any(axis=-1) | np.isinf(image).any(axis=-1)
             # Replace invalid image values with -1 (this sets all channels at that pixel to -1)
             image[invalid_image] = -1
+            combined_mask_image = np.ones((image.shape[0], image.shape[1]), dtype=np.float32)
+            combined_mask_image[invalid_image] = 0
 
             # For the depth, find invalid pixels
             invalid_depth = np.isnan(image_depth) | np.isinf(image_depth)
             image_depth[invalid_depth] = -1
-                        
+            combined_mask_image[invalid_depth] = 0
+         
             # Convert numpy arrays to torch tensors
             # For image: Convert from H x W x C to C x H x W
             image_tensor = torch.from_numpy(image).permute(2, 0, 1)
             # For depth: Add a channel dimension to convert from H x W to 1 x H x W
             depth_tensor = torch.from_numpy(image_depth).unsqueeze(0).repeat(3, 1, 1)
+            mask_tensor = torch.from_numpy(combined_mask_image)
 
             # Apply random horizontal flip
             if torch.rand(1) < 0.5:
                 flipped_image = F.hflip(image_tensor)
                 flipped_depth = F.hflip(depth_tensor)
+                flipped_mask_tensor = F.hflip(mask_tensor)
             else:
                 flipped_image = image_tensor
                 flipped_depth = depth_tensor
+                flipped_mask_tensor = mask_tensor
 
             # Normalize the tensors; adjust the mean and std for image channels
             normalised_image = F.normalize(flipped_image, [0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
@@ -118,6 +124,7 @@ class CustomDataset(IterableDataset):
                 "image": normalised_image,
                 "image_depth": normalised_depth,
                 "input_ids": getEncodedPrompt(""),
+                "mask": flipped_mask_tensor,
             }
 
 
