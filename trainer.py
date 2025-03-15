@@ -142,6 +142,15 @@ class Trainer:
                     
                     depth_image = batch["image_depth"].to("cuda")
 
+                    # Check for non-finite values in image
+                    if not torch.all(torch.isfinite(image)):
+                        print("Warning: The processed image contains non-finite (NaN or Inf) values!")
+
+                    # Check for non-finite values in depth_image
+                    if not torch.all(torch.isfinite(depth_image)):
+                        print("Warning: The depth image contains non-finite (NaN or Inf) values!")
+
+
                     x_0 = vae.encode(image).latent_dist.sample()
                     x_0 = x_0 * vae.config.scaling_factor
 
