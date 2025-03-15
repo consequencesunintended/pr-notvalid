@@ -104,7 +104,7 @@ class Trainer:
         if self.accelerator.is_local_main_process:
             print("Data Prepared!")
 
-        optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-10)
+        optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
         num_training_steps = 10_000
         num_warmup_steps = 500
@@ -136,15 +136,7 @@ class Trainer:
 
                 with torch.no_grad():
                     image = batch["image"].to("cuda")
-                    image_mask = torch.isfinite(image)
-                    # Replace non-finite (e.g. inf) values with -1.0 so that the model gets a valid input
-                    image = torch.where(image_mask, image, torch.full_like(image, -1.0))
-                    
                     depth_image = batch["image_depth"].to("cuda")
-
-                    # Check for non-finite values in image
-                    if not torch.all(torch.isfinite(image)):
-                        print("Warning: The processed image contains non-finite (NaN or Inf) values!")
 
                     x_0 = vae.encode(image).latent_dist.sample()
                     x_0 = x_0 * vae.config.scaling_factor
@@ -177,15 +169,7 @@ class Trainer:
 
                 image_reconstructed = vae.decode(image_reconstructed_latents / vae.config.scaling_factor, return_dict=False)[0]
 
-                # Compute the element-wise MSE loss without reduction
-                loss_values = F1.mse_loss(predicted_annotation, depth_image, reduction="none")
-
-                # Create a mask where the depth_image has valid (non-NaN) values
-                valid_mask = torch.isfinite(depth_image)  # isfinite covers both NaNs and infs
-
-                # Apply the mask to the loss values and compute the mean over only valid pixels.
-                predicted_annotation_loss = loss_values[valid_mask].mean()
-
+                predicted_annotation_loss = F1.mse_loss(predicted_annotation, depth_image, reduction="mean")
                 image_reconstructed_loss = F1.mse_loss(image_reconstructed, image, reduction="mean")
 
                 weights = random_prob.squeeze()
