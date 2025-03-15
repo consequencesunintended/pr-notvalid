@@ -107,7 +107,7 @@ class Trainer:
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
         num_training_steps = 10_000
-        num_warmup_steps = 1000
+        num_warmup_steps = 500
 
         scheduler = get_cosine_schedule_with_warmup(
             optimizer=optimizer,

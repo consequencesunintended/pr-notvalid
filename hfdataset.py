@@ -1,3 +1,4 @@
+from transformers import CLIPTokenizer
 from torch.utils.data import IterableDataset
 import torch
 from datasets import load_dataset
@@ -6,6 +7,21 @@ import random
 import io
 import h5py
 import numpy as np
+
+MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
+
+tokenizer = CLIPTokenizer.from_pretrained(
+    MODEL_ID, subfolder="tokenizer", revision=None
+)
+
+def getEncodedPrompt(prompt):
+    return tokenizer(
+                prompt,
+                padding="max_length",
+                max_length=tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            ).input_ids
 
 class CustomDataset(IterableDataset):
     def __init__(self, dataset, transform_image=None, transform_image_seg = None):
@@ -90,15 +106,10 @@ class CustomDataset(IterableDataset):
             normalised_image = F.normalize(flipped_image, [0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             normalised_depth = F.normalize(flipped_depth, [0.5], [0.5])
 
-            # Set up the encoded prompt as before
-            encoded_none_prompt = torch.zeros([1, 77], dtype=torch.long)
-            encoded_none_prompt[0, 0] = 49406
-            encoded_none_prompt[0, 1] = 49407
-
             yield {
                 "image": normalised_image,
                 "image_depth": normalised_depth,
-                "input_ids": encoded_none_prompt,
+                "input_ids": getEncodedPrompt(""),
             }
 
 
