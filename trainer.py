@@ -169,7 +169,15 @@ class Trainer:
 
                 image_reconstructed = vae.decode(image_reconstructed_latents / vae.config.scaling_factor, return_dict=False)[0]
 
-                predicted_annotation_loss = F1.mse_loss(predicted_annotation, depth_image, reduction="mean")
+                # Compute the element-wise MSE loss without reduction
+                loss_values = F1.mse_loss(predicted_annotation, depth_image, reduction="none")
+
+                # Create a mask where the depth_image has valid (non-NaN) values
+                valid_mask = torch.isfinite(depth_image)  # isfinite covers both NaNs and infs
+
+                # Apply the mask to the loss values and compute the mean over only valid pixels.
+                predicted_annotation_loss = loss_values[valid_mask].mean()
+                
                 image_reconstructed_loss = F1.mse_loss(image_reconstructed, image, reduction="mean")
 
                 weights = random_prob.squeeze()
