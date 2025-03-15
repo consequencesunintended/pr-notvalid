@@ -107,7 +107,7 @@ class Trainer:
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
         num_training_steps = 10_000
-        num_warmup_steps = 500
+        num_warmup_steps = 1000
 
         scheduler = get_cosine_schedule_with_warmup(
             optimizer=optimizer,
@@ -145,11 +145,6 @@ class Trainer:
                     # Check for non-finite values in image
                     if not torch.all(torch.isfinite(image)):
                         print("Warning: The processed image contains non-finite (NaN or Inf) values!")
-
-                    # Check for non-finite values in depth_image
-                    if not torch.all(torch.isfinite(depth_image)):
-                        print("Warning: The depth image contains non-finite (NaN or Inf) values!")
-
 
                     x_0 = vae.encode(image).latent_dist.sample()
                     x_0 = x_0 * vae.config.scaling_factor
@@ -191,11 +186,7 @@ class Trainer:
                 # Apply the mask to the loss values and compute the mean over only valid pixels.
                 predicted_annotation_loss = loss_values[valid_mask].mean()
 
-                print(f'predicted_annotation_loss {predicted_annotation_loss}')
-
                 image_reconstructed_loss = F1.mse_loss(image_reconstructed, image, reduction="mean")
-
-                print(f'image_reconstructed_loss {image_reconstructed_loss}')
 
                 weights = random_prob.squeeze()
                 weighted_loss = weights * predicted_annotation_loss + (1 - weights) * image_reconstructed_loss
