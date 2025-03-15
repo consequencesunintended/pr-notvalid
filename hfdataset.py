@@ -86,8 +86,16 @@ class CustomDataset(IterableDataset):
                 image_depth = image_depth[top:top+crop_h, left:left+crop_w]
             else:
                 raise ValueError("Image size is smaller than the crop size.")
-                
 
+            # For the image, determine invalid pixels (if any channel is NaN or Inf)
+            invalid_image = np.isnan(image).any(axis=-1) | np.isinf(image).any(axis=-1)
+            # Replace invalid image values with -1 (this sets all channels at that pixel to -1)
+            image[invalid_image] = -1
+
+            # For the depth, find invalid pixels
+            invalid_depth = np.isnan(image_depth) | np.isinf(image_depth)
+            image_depth[invalid_depth] = -1
+                        
             # Convert numpy arrays to torch tensors
             # For image: Convert from H x W x C to C x H x W
             image_tensor = torch.from_numpy(image).permute(2, 0, 1)
