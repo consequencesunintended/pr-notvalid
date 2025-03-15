@@ -191,7 +191,11 @@ class Trainer:
                 # Apply the mask to the loss values and compute the mean over only valid pixels.
                 predicted_annotation_loss = loss_values[valid_mask].mean()
 
+                print(f'predicted_annotation_loss {predicted_annotation_loss}')
+
                 image_reconstructed_loss = F1.mse_loss(image_reconstructed, image, reduction="mean")
+
+                print(f'image_reconstructed_loss {image_reconstructed_loss}')
 
                 weights = random_prob.squeeze()
                 weighted_loss = weights * predicted_annotation_loss + (1 - weights) * image_reconstructed_loss
