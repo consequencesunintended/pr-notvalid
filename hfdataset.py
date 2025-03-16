@@ -67,7 +67,7 @@ class CustomDataset(IterableDataset):
             normalized_depth = (depth - min_depth) / (max_depth - min_depth)
 
         # Directly map [0,1] -> [-1,1]
-        normalized_depth = normalized_depth * 2 - 1
+        # normalized_depth = normalized_depth * 2 - 1
         return normalized_depth
 
 
