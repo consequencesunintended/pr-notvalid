@@ -37,7 +37,7 @@ class CustomDataset(IterableDataset):
         return self.dataset.num_shards
 
     def __tone_map_color(self, item):
-        with h5py.File(io.BytesIO(item['color_data']), 'r') as f:
+        with h5py.File(io.BytesIO(item['color.hdf5']), 'r') as f:
             rgb = f["dataset"][:].astype(np.float32)
 
         brightness = 0.3 * rgb[:, :, 0] + 0.59 * rgb[:, :, 1] + 0.11 * rgb[:, :, 2]
@@ -53,7 +53,7 @@ class CustomDataset(IterableDataset):
         return rgb_tone
 
     def __normalize_depth(self, item):
-        with h5py.File(io.BytesIO(item['depth_data']), 'r') as f:
+        with h5py.File(io.BytesIO(item['depth_meters.hdf5']), 'r') as f:
             depth = f["dataset"][:].astype(np.float32)
 
         min_depth = np.nanmin(depth)
@@ -129,7 +129,7 @@ class CustomDataset(IterableDataset):
 
 
 def load_hf_dataset(num_processes, process_index):
-    ds_shard = load_dataset("alexnasa/hypersim-depth", split="train", streaming=True).shard(num_processes, process_index)
+    ds_shard = load_dataset("alexnasa/ml-hypersim-depthonly", split="train", streaming=True).shard(num_processes, process_index)
     train_dataset = CustomDataset(ds_shard.with_format("torch"))
     
     return train_dataset
