@@ -44,42 +44,50 @@ class CustomDataset(IterableDataset):
             image = Image.open(io.BytesIO(item['color'])).convert("RGB")
             image_depth = Image.open(io.BytesIO(item['depth'])).convert("RGB")
             
+            # Resize images so that the height is 512 while maintaining the aspect ratio.
+            orig_width, orig_height = image.size  # PIL: (width, height)
+            new_height = 512
+            scale = new_height / orig_height
+            new_width = int(orig_width * scale)
+            image = image.resize((new_width, new_height), resample=Image.BILINEAR)
+            image_depth = image_depth.resize((new_width, new_height), resample=Image.BILINEAR)
+            
             # Convert PIL images to NumPy arrays.
             image_np = np.array(image)
             depth_np = np.array(image_depth)
-
-            # --- Random crop of 512x512 ---
+            
+            # --- Random horizontal crop to 512x512 ---
             crop_h, crop_w = 512, 512
-            H, W, _ = image_np.shape  # image_np has shape (height, width, channels)
-            if H >= crop_h and W >= crop_w:
-                top = random.randint(0, H - crop_h)
-                left = random.randint(0, W - crop_w)
-                image_np = image_np[top:top+crop_h, left:left+crop_w, :]
-                depth_np = depth_np[top:top+crop_h, left:left+crop_w, :]
+            # Since height is exactly 512, we only need to crop width.
+            if new_width >= crop_w:
+                left = random.randint(0, new_width - crop_w)
+                image_np = image_np[:, left:left+crop_w, :]
+                depth_np = depth_np[:, left:left+crop_w, :]
             else:
-                raise ValueError("Image size is smaller than the crop size.")
-
+                raise ValueError("Resized width is smaller than the crop width.")
+            
             # Convert numpy arrays to torch tensors and scale to [0, 1].
             image_tensor = torch.from_numpy(image_np).float() / 255.0
-            image_tensor = image_tensor.permute(2, 0, 1)  # Convert to (C, H, W)
-
+            image_tensor = image_tensor.permute(2, 0, 1)  # (H, W, C) -> (C, H, W)
+            
             depth_tensor = torch.from_numpy(depth_np).float() / 255.0
-            depth_tensor = depth_tensor.permute(2, 0, 1)  # Convert to (C, H, W)
-
+            depth_tensor = depth_tensor.permute(2, 0, 1)  # (H, W, C) -> (C, H, W)
+            
             # Apply random horizontal flip.
             if torch.rand(1) < 0.5:
                 image_tensor = F.hflip(image_tensor)
                 depth_tensor = F.hflip(depth_tensor)
-
-            # Normalize the tensors using mean and std of 0.5 for each of the 3 channels.
+            
+            # Normalize the tensors using mean and std of 0.5 for each channel.
             normalized_image = F.normalize(image_tensor, mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
             normalized_depth = F.normalize(depth_tensor, mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-
+            
             yield {
                 "image": normalized_image,
                 "image_depth": normalized_depth,
                 "input_ids": getEncodedPrompt("")
             }
+
 
 
 
