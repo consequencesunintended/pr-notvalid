@@ -106,8 +106,8 @@ class Trainer:
 
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
-        num_training_steps = 4000
-        num_warmup_steps = 500
+        num_training_steps = 200
+        num_warmup_steps = 50
 
         scheduler = get_cosine_schedule_with_warmup(
             optimizer=optimizer,
@@ -202,23 +202,13 @@ class Trainer:
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
 
-                    checkpoint_path = "/root/output/checkpoint"
-                    os.makedirs(checkpoint_path, exist_ok=True)
-                    # Save the trained UNet checkpoint
-                    model_to_save = self.accelerator.unwrap_model(self.model)
-                    model_to_save.save_pretrained(checkpoint_path)
-                    print(f"Saved UNet checkpoint to {checkpoint_path}")
-
-            if i == num_training_steps:
-                force_stop = True   
-
-        # After the training loop ends
-        if self.accelerator.is_main_process:
-            checkpoint_path = "/root/output/checkpoint"
-            os.makedirs(checkpoint_path, exist_ok=True)
-            # Save the trained UNet checkpoint
-            model_to_save = self.accelerator.unwrap_model(self.model)
-            model_to_save.save_pretrained(checkpoint_path)
-            print(f"Saved UNet checkpoint to {checkpoint_path}")
+                    if i >= num_training_steps:  
+                        checkpoint_path = "/root/output/checkpoint"
+                        os.makedirs(checkpoint_path, exist_ok=True)
+                        # Save the trained UNet checkpoint
+                        model_to_save = self.accelerator.unwrap_model(self.model)
+                        model_to_save.save_pretrained(checkpoint_path)
+                        print(f"Saved UNet checkpoint to {checkpoint_path}")  
+                        force_stop = True   
 
         self.accelerator.end_training()
