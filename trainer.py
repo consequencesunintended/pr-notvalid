@@ -212,6 +212,6 @@ class Trainer:
                         stop_flag["force_stop"] = True  
 
         print("training ended")
-        os._exit(0)
+        raise EndOfTraining
         self.accelerator.end_training()
         
