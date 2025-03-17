@@ -6,7 +6,6 @@ import torch.nn.functional as F1
 from torch.utils.data import DataLoader
 import gc
 import os
-import sys
 from hfdataset import load_hf_dataset
 from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import DistributedDataParallelKwargs
@@ -217,6 +216,5 @@ class Trainer:
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group()
 
-        # raise Exception("Training complete")   
-        sys.exit(0)
+        raise Exception("Training complete")   
 
