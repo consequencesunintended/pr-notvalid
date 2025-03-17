@@ -15,9 +15,6 @@ from transformers import get_cosine_schedule_with_warmup
 
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
-class EndOfTraining(Exception):
-    pass
-
 class Trainer:
 
     def train(self):
@@ -215,6 +212,6 @@ class Trainer:
                         stop_flag["force_stop"] = True  
 
         print("training ended")
-        raise EndOfTraining
+        raise Exception("Training complete")
         self.accelerator.end_training()
         
