@@ -213,6 +213,10 @@ class Trainer:
 
         print("training ended")
         self.accelerator.end_training()
+
+        # accelerate as a subprocess currently doesn't terminate some of the process correctly
+        # hence the force termination by calling an exception, it won't terminate gracefully but
+        # the modal container will be stopped
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group()
 
