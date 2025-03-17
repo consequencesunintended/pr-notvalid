@@ -106,8 +106,8 @@ class Trainer:
 
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
-        num_training_steps = 200
-        num_warmup_steps = 50
+        num_training_steps = 50
+        num_warmup_steps = 10
 
         scheduler = get_cosine_schedule_with_warmup(
             optimizer=optimizer,
@@ -211,4 +211,5 @@ class Trainer:
                         print(f"Saved UNet checkpoint to {checkpoint_path}")  
                         stop_flag["force_stop"] = True  
 
+        print("training ended")
         self.accelerator.end_training()
