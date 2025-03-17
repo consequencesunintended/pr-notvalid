@@ -212,6 +212,5 @@ class Trainer:
                         stop_flag["force_stop"] = True  
 
         print("training ended")
-        raise Exception("Training complete")
         self.accelerator.end_training()
-        
+        raise Exception("Training complete")   
