@@ -213,5 +213,7 @@ class Trainer:
 
         print("training ended")
         self.accelerator.end_training()
-        torch.distributed.destroy_process_group()
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
+
         raise Exception("Training complete")   
