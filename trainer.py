@@ -213,3 +213,4 @@ class Trainer:
 
         print("training ended")
         self.accelerator.end_training()
+        torch.distributed.destroy_process_group()  # Explicitly destroy the process group
