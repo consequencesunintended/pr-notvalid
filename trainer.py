@@ -106,8 +106,8 @@ class Trainer:
 
         optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
-        num_training_steps = 50
-        num_warmup_steps = 10
+        num_training_steps = 4_000
+        num_warmup_steps = 500
 
         scheduler = get_cosine_schedule_with_warmup(
             optimizer=optimizer,
@@ -213,4 +213,4 @@ class Trainer:
 
         print("training ended")
         self.accelerator.end_training()
-        torch.distributed.destroy_process_group()  # Explicitly destroy the process group
+        
