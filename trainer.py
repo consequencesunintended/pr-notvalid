@@ -205,7 +205,8 @@ class Trainer:
                     checkpoint_path = "/root/output/checkpoint"
                     os.makedirs(checkpoint_path, exist_ok=True)
                     # Save the trained UNet checkpoint
-                    self.model.save_pretrained(checkpoint_path)
+                    model_to_save = self.accelerator.unwrap_model(self.model)
+                    model_to_save.save_pretrained(checkpoint_path)
                     print(f"Saved UNet checkpoint to {checkpoint_path}")
 
             if i == num_training_steps:
@@ -216,7 +217,8 @@ class Trainer:
             checkpoint_path = "/root/output/checkpoint"
             os.makedirs(checkpoint_path, exist_ok=True)
             # Save the trained UNet checkpoint
-            self.model.save_pretrained(checkpoint_path)
+            model_to_save = self.accelerator.unwrap_model(self.model)
+            model_to_save.save_pretrained(checkpoint_path)
             print(f"Saved UNet checkpoint to {checkpoint_path}")
 
         self.accelerator.end_training()
