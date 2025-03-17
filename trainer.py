@@ -117,20 +117,20 @@ class Trainer:
 
         unet, vae, optimizer, data_loader, scheduler = self.accelerator.prepare(unet, vae, optimizer, data_loader, scheduler)
 
-        force_stop = False
+        stop_flag = {"force_stop": False}
 
-        def cycle(loader, force_stop):
+        def cycle(loader, stop_flag):
             while True:
                 for batch in loader:
-                    if force_stop:
+                    if stop_flag["force_stop"]:
                         break
                     yield batch
-                if force_stop:
+                if stop_flag["force_stop"]:
                     break
 
         self.model = unet
 
-        for i, batch in enumerate(cycle(data_loader, force_stop)):
+        for i, batch in enumerate(cycle(data_loader, stop_flag)):
 
             with self.accelerator.accumulate(self.model):
 
@@ -209,6 +209,6 @@ class Trainer:
                         model_to_save = self.accelerator.unwrap_model(self.model)
                         model_to_save.save_pretrained(checkpoint_path)
                         print(f"Saved UNet checkpoint to {checkpoint_path}")  
-                        force_stop = True   
+                        stop_flag["force_stop"] = True  
 
         self.accelerator.end_training()
