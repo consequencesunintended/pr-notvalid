@@ -216,4 +216,6 @@ class Trainer:
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group()
 
-        raise Exception("Training complete")   
+        # raise Exception("Training complete")   
+        sys.exit(0)
+
