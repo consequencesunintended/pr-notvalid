@@ -202,8 +202,21 @@ class Trainer:
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/my_image_{i}.png')
 
-            if i == num_training_steps:
-                False   
+                    checkpoint_path = "/root/output/checkpoint"
+                    os.makedirs(checkpoint_path, exist_ok=True)
+                    # Save the trained UNet checkpoint
+                    self.model.save_pretrained(checkpoint_path)
+                    print(f"Saved UNet checkpoint to {checkpoint_path}")
 
-    
+            if i == num_training_steps:
+                force_stop = True   
+
+        # After the training loop ends
+        if self.accelerator.is_main_process:
+            checkpoint_path = "/root/output/checkpoint"
+            os.makedirs(checkpoint_path, exist_ok=True)
+            # Save the trained UNet checkpoint
+            self.model.save_pretrained(checkpoint_path)
+            print(f"Saved UNet checkpoint to {checkpoint_path}")
+
         self.accelerator.end_training()
