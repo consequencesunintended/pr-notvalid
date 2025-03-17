@@ -6,7 +6,6 @@ import torchvision.transforms.functional as F
 import random
 from PIL import Image
 import io
-import h5py
 import numpy as np
 
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
