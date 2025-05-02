@@ -36,6 +36,11 @@ class CustomDataset(IterableDataset):
     def num_shards(self):
         return self.dataset.num_shards
 
+    def state_dict(self):
+        return self.data.state_dict()
+
+    def load_state_dict(self, state):
+        self.data.load_state_dict(state)
 
     def __iter__(self):
         for item in self.dataset:
