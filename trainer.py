@@ -205,8 +205,8 @@ class Trainer:
 
         self.optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
-        num_training_steps = 40
-        num_warmup_steps = 5
+        num_training_steps = 400
+        num_warmup_steps = 100
 
         self.scheduler = get_cosine_schedule_with_warmup(
             optimizer=self.optimizer,
@@ -218,7 +218,13 @@ class Trainer:
 
         self.current_dataloader = data_loader
         self.model = unet
+        self.save_per_updates = 100
 
+        start_update = self.load_checkpoint()
+        global_update = start_update
+
+        self.checkpoint_path = "/root/output/checkpoint"
+        os.makedirs(self.checkpoint_path, exist_ok=True)
 
         stop_flag = {"force_stop": False}
 
@@ -281,6 +287,8 @@ class Trainer:
                 loss = weighted_loss.mean()
 
                 self.accelerator.backward(loss)
+                
+
 
                 if self.accelerator.sync_gradients:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
@@ -288,8 +296,13 @@ class Trainer:
                 self.optimizer.step()
                 self.scheduler.step()
                 self.optimizer.zero_grad()
-                self.checkpoint_path = "/root/output/checkpoint"
-                os.makedirs(self.checkpoint_path, exist_ok=True)
+
+            if self.accelerator.sync_gradients:
+                global_update += 1
+
+            if global_update % self.save_per_updates == 0 and self.accelerator.sync_gradients:
+                self.save_checkpoint(global_update)
+                self.save_checkpoint(global_update, last=True)
 
             if self.accelerator.sync_gradients:                
                 reduced_loss = self.accelerator.reduce(loss, reduction="mean")
