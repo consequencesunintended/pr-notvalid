@@ -12,10 +12,109 @@ from accelerate.utils import DistributedDataParallelKwargs
 import multiprocessing
 from PIL import Image
 from transformers import get_cosine_schedule_with_warmup
+from torch.distributed import all_gather_object, barrier
 
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
 class Trainer:
+    @property
+    def is_main(self):
+        return self.accelerator.is_main_process
+
+    def _unwrap_dataset(self, ds):
+        """
+        Walk through Accelerate’s wrappers until we hit the real HF dataset
+        that actually owns the iterator state.
+        """
+        while hasattr(ds, "dataset"):
+            ds = ds.dataset          # peel off DataLoaderShard → IterableDatasetShard
+        return ds
+
+    def _get_dataset_state(self):
+        ds = self._unwrap_dataset(self.current_dataloader.dataset)
+
+        return ds.state_dict() if hasattr(ds, "state_dict") else None
+
+    def save_checkpoint(self, update, last=False):
+        self.accelerator.wait_for_everyone()
+
+        # each rank gathers its dataset state
+        my_ds_state = self._get_dataset_state()
+        gathered_states = [None] * self.accelerator.num_processes
+        all_gather_object(gathered_states, my_ds_state)
+        barrier()  # ensure gather is complete
+
+        if self.is_main:
+            checkpoint = dict(
+                model_state_dict=self.accelerator.unwrap_model(self.model).state_dict(),
+                optimizer_state_dict=self.accelerator.unwrap_model(self.optimizer).state_dict(),
+                scheduler_state_dict=self.scheduler.state_dict(),
+                all_dataset_states=gathered_states,   # list indexed by rank
+                update=update,
+            )
+            if not os.path.exists(self.checkpoint_path):
+                os.makedirs(self.checkpoint_path)
+            if last:
+                self.accelerator.save(checkpoint, f"{self.checkpoint_path}/model_last.pt")
+                print(f"Saved last checkpoint at update {update}")
+            else:
+                self.accelerator.save(checkpoint, f"{self.checkpoint_path}/model_{update}.pt")
+
+    def load_checkpoint(self):
+        # ————————————————————————————————————————————————————————————
+        # 1) Look for the latest checkpoint file, just as before
+        # ————————————————————————————————————————————————————————————
+        if (
+            not os.path.exists(self.checkpoint_path)
+            or not any(f.endswith(".pt") for f in os.listdir(self.checkpoint_path))
+        ):
+            return 0
+
+        # ensure everyone waits here so filesystem is consistent
+        self.accelerator.wait_for_everyone()
+
+        # pick “last” or highest‐numbered
+        files = os.listdir(self.checkpoint_path)
+        if "model_last.pt" in files:
+            latest = "model_last.pt"
+        else:
+            cks = [f for f in files if f.startswith("model_") and f.endswith(".pt")]
+            latest = sorted(cks, key=lambda x: int(x.split("_")[1].split(".")[0]))[-1]
+
+        path = os.path.join(self.checkpoint_path, latest)
+
+        # ————————————————————————————————————————————————————————————
+        # 2) Load the merged checkpoint on every rank
+        # ————————————————————————————————————————————————————————————
+        checkpoint = torch.load(path, map_location="cpu")
+
+        # ————————————————————————————————————————————————————————————
+        # 3) Load model / optimizer / scheduler / EMA
+        # ————————————————————————————————————————————————————————————
+        # (these are identical on every rank)
+        model_sd = checkpoint["model_state_dict"]
+        opt_sd   = checkpoint["optimizer_state_dict"]
+        sched_sd = checkpoint["scheduler_state_dict"]
+
+        self.accelerator.unwrap_model(self.model).load_state_dict(model_sd)
+        self.accelerator.unwrap_model(self.optimizer).load_state_dict(opt_sd)
+        self.scheduler.load_state_dict(sched_sd)
+
+        # ————————————————————————————————————————————————————————————
+        # 4) Restore each rank’s dataset state
+        # ————————————————————————————————————————————————————————————
+        # we saved a list indexed by rank
+        all_states = checkpoint["all_dataset_states"]
+        my_state  = all_states[self.accelerator.process_index]
+
+        ds = self._unwrap_dataset(self.current_dataloader.dataset)
+        if hasattr(ds, "load_state_dict") and my_state is not None:
+            ds.load_state_dict(my_state)
+
+        # ————————————————————————————————————————————————————————————
+        # 5) Return the update number for training loop
+        # ————————————————————————————————————————————————————————————
+        return checkpoint.get("update", 0)
 
     def train(self):
         multiprocessing.set_start_method("spawn", force=True)
@@ -104,18 +203,22 @@ class Trainer:
         if self.accelerator.is_local_main_process:
             print("Data Prepared!")
 
-        optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
+        self.optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
         num_training_steps = 40
         num_warmup_steps = 5
 
-        scheduler = get_cosine_schedule_with_warmup(
-            optimizer=optimizer,
+        self.scheduler = get_cosine_schedule_with_warmup(
+            optimizer=self.optimizer,
             num_warmup_steps=num_warmup_steps,
             num_training_steps=num_training_steps
         )
 
-        unet, vae, optimizer, data_loader, scheduler = self.accelerator.prepare(unet, vae, optimizer, data_loader, scheduler)
+        unet, vae, self.optimizer, data_loader, self.scheduler = self.accelerator.prepare(unet, vae, self.optimizer, data_loader, self.scheduler)
+
+        self.current_dataloader = data_loader
+        self.model = unet
+
 
         stop_flag = {"force_stop": False}
 
@@ -128,9 +231,7 @@ class Trainer:
                 if stop_flag["force_stop"]:
                     break
 
-        self.model = unet
-
-        for i, batch in enumerate(cycle(data_loader, stop_flag)):
+        for i, batch in enumerate(cycle(self.current_dataloader, stop_flag)):
 
             with self.accelerator.accumulate(self.model):
 
@@ -184,9 +285,11 @@ class Trainer:
                 if self.accelerator.sync_gradients:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
                     
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()
+                self.optimizer.step()
+                self.scheduler.step()
+                self.optimizer.zero_grad()
+                self.checkpoint_path = "/root/output/checkpoint"
+                os.makedirs(self.checkpoint_path, exist_ok=True)
 
             if self.accelerator.sync_gradients:                
                 reduced_loss = self.accelerator.reduce(loss, reduction="mean")
@@ -203,12 +306,11 @@ class Trainer:
                     im.save(f'{output_dir}/my_image_{i}.png')
 
                     if i >= num_training_steps:  
-                        checkpoint_path = "/root/output/checkpoint"
-                        os.makedirs(checkpoint_path, exist_ok=True)
+                                               
                         # Save the trained UNet checkpoint
                         model_to_save = self.accelerator.unwrap_model(self.model)
-                        model_to_save.save_pretrained(checkpoint_path)
-                        print(f"Saved UNet checkpoint to {checkpoint_path}")  
+                        model_to_save.save_pretrained(self.checkpoint_path)
+                        print(f"Saved UNet checkpoint to {self.checkpoint_path}")  
                         stop_flag["force_stop"] = True  
 
         print("training ended")
