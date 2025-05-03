@@ -309,17 +309,38 @@ class Trainer:
                 if self.accelerator.is_main_process:
                     print(f'loss:{loss.item()} learning_rate:{self.scheduler.get_last_lr()[0]} step:{global_update}', flush=True)
 
-                    predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
-                    image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
-                    image_np = (image_np * 255).astype(np.uint8)
-                    im = Image.fromarray(image_np)
+                    # 1) Convert predicted depth to a displayable image
+                    pred = (predicted_annotation / 2 + 0.5).clamp(0, 1)
+                    pred_np = pred[0].float().permute(1, 2, 0).detach().cpu().numpy()  # H×W×C
+                    pred_uint8 = (pred_np * 255).astype(np.uint8)
+                    pred_im = Image.fromarray(pred_uint8)
+                    if pred_im.mode != "RGB":
+                        pred_im = pred_im.convert("RGB")
+
+                    # 2) Convert ground-truth depth to a displayable image
+                    gt = depth_image[0].float().detach().cpu().numpy()  # assume shape 1×H×W or H×W
+                    if gt.ndim == 3:
+                        gt = gt.squeeze(0)
+                    gt_norm = (gt - gt.min()) / (gt.max() - gt.min() + 1e-8)  # normalize to [0,1]
+                    gt_uint8 = (gt_norm * 255).astype(np.uint8)
+                    gt_im = Image.fromarray(gt_uint8)
+                    gt_im = gt_im.convert("RGB")
+
+                    # 3) Make a new image wide enough for both
+                    w, h = pred_im.size
+                    new_im = Image.new("RGB", (w * 2, h))
+                    new_im.paste(gt_im, (0, 0))
+                    new_im.paste(pred_im, (w, 0))
+
+                    # 4) Save
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
-                    im.save(f'{output_dir}/my_image_{global_update}.png')
+                    new_im.save(f"{output_dir}/depth_compare_{global_update}.png")
 
-                    if i >= num_training_steps:  
-                                               
-                        stop_flag["force_stop"] = True  
+                    # 5) Stop if done
+                    if i >= num_training_steps:
+                        stop_flag["force_stop"] = True
+
 
         print("training ended")
         self.accelerator.end_training()
