@@ -17,7 +17,7 @@ tokenizer = CLIPTokenizer.from_pretrained(
 def getEncodedPrompt(prompt):
     return tokenizer(
                 prompt,
-                padding="max_length",
+                padding="do_not_pad",
                 max_length=tokenizer.model_max_length,
                 truncation=True,
                 return_tensors="pt",
