@@ -45,8 +45,8 @@ class CustomDataset(IterableDataset):
     def __iter__(self):
         for item in self.dataset:
             # Open images and convert to RGB so that both have 3 channels.
-            image = Image.open(io.BytesIO(item['color'])).convert("RGB")
-            image_depth = Image.open(io.BytesIO(item['depth'])).convert("RGB")
+            image = item['color'].convert("RGB")
+            image_depth = item['depth'].convert("RGB")
             
             # Resize images so that the height is 512 while maintaining the aspect ratio.
             orig_width, orig_height = image.size  # PIL: (width, height)
