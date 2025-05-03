@@ -205,8 +205,8 @@ class Trainer:
 
         self.optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
 
-        num_training_steps = 400
-        num_warmup_steps = 100
+        num_training_steps = 10000
+        num_warmup_steps = 500
 
         self.scheduler = get_cosine_schedule_with_warmup(
             optimizer=self.optimizer,
@@ -218,7 +218,7 @@ class Trainer:
 
         self.current_dataloader = data_loader
         self.model = unet
-        self.save_per_updates = 100
+        self.save_per_updates = 30
 
         self.checkpoint_path = "/root/output/checkpoint"
         os.makedirs(self.checkpoint_path, exist_ok=True)
