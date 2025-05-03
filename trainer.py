@@ -315,7 +315,7 @@ class Trainer:
                     im = Image.fromarray(image_np)
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
-                    im.save(f'{output_dir}/prediction_{global_update}.png')
+                    im.save(f'{output_dir}/lotus_depth_prediction_{global_update}.png')
 
                     depth_image_np = (depth_image / 2 + 0.5).clamp(0, 1)
                     image_np = depth_image_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
@@ -323,7 +323,7 @@ class Trainer:
                     im = Image.fromarray(image_np)
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
-                    im.save(f'{output_dir}/target_{global_update}.png')
+                    im.save(f'{output_dir}/lotus_depth_target_{global_update}.png')
 
                     if i >= num_training_steps:  
                                                
