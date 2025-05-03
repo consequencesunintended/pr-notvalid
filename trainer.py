@@ -218,7 +218,7 @@ class Trainer:
 
         self.current_dataloader = data_loader
         self.model = unet
-        self.save_per_updates = 100
+        self.save_per_updates = 30
 
         self.checkpoint_path = "/root/output/checkpoint"
         os.makedirs(self.checkpoint_path, exist_ok=True)
