@@ -288,8 +288,6 @@ class Trainer:
 
                 self.accelerator.backward(loss)
                 
-
-
                 if self.accelerator.sync_gradients:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
                     
