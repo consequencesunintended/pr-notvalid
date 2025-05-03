@@ -248,7 +248,7 @@ class Trainer:
 
 
                     # x_0 = vae.encode(image).latent_dist.sample()
-                    x_0 = torch.cat((image,depth_image), dim=0).to(weight_dtype)
+                    x_0 = torch.cat((image,depth_image), dim=0).to("cuda")
                     x_0 = x_0 * vae.config.scaling_factor
 
                     bsz = x_0.shape[0]
