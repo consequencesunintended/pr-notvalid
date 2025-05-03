@@ -307,7 +307,7 @@ class Trainer:
                 reduced_loss = self.accelerator.reduce(loss, reduction="mean")
 
                 if self.accelerator.is_main_process:
-                    print(f'loss":{loss.item()} "lr":{self.scheduler.get_last_lr()[0]} step:{global_update}', flush=True)
+                    print(f'loss:{loss.item()} learning_rate:{self.scheduler.get_last_lr()[0]} step:{global_update}', flush=True)
 
                     predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
                     image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
