@@ -97,6 +97,6 @@ class CustomDataset(IterableDataset):
 
 def load_hf_dataset(num_processes, process_index):
     ds_shard = load_dataset("alexnasa/hypersim-depth", split="train", streaming=True).shard(num_processes, process_index)
-    train_dataset = CustomDataset(ds_shard.with_format("torch"))
+    train_dataset = CustomDataset(ds_shard)
     
     return train_dataset
