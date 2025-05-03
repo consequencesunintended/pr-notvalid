@@ -220,11 +220,12 @@ class Trainer:
         self.model = unet
         self.save_per_updates = 100
 
+        self.checkpoint_path = "/root/output/checkpoint"
+        os.makedirs(self.checkpoint_path, exist_ok=True)
+        
         start_update = self.load_checkpoint()
         global_update = start_update
 
-        self.checkpoint_path = "/root/output/checkpoint"
-        os.makedirs(self.checkpoint_path, exist_ok=True)
 
         stop_flag = {"force_stop": False}
 
