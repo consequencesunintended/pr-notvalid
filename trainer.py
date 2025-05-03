@@ -319,10 +319,6 @@ class Trainer:
 
                     if i >= num_training_steps:  
                                                
-                        # Save the trained UNet checkpoint
-                        model_to_save = self.accelerator.unwrap_model(self.model)
-                        model_to_save.save_pretrained(self.checkpoint_path)
-                        print(f"Saved UNet checkpoint to {self.checkpoint_path}")  
                         stop_flag["force_stop"] = True  
 
         print("training ended")
