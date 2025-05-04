@@ -247,8 +247,7 @@ class Trainer:
                     depth_image = batch["image_depth"].to("cuda")
 
 
-                    # x_0 = vae.encode(image).latent_dist.sample()
-                    x_0 = torch.cat((image,depth_image), dim=0).to("cuda")
+                    x_0 = vae.encode(image).latent_dist.sample()
                     x_0 = x_0 * vae.config.scaling_factor
 
                     bsz = x_0.shape[0]
@@ -262,8 +261,7 @@ class Trainer:
                     fixed_timestep = noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
                     timesteps = torch.full((bsz,), fixed_timestep, device=x_0.device, dtype=torch.long)
 
-                    # rgb_latents = x_0
-                    rgb_latents = x_0[:,:,:,:,:3]
+                    rgb_latents = x_0
 
                 latent_model_input = rgb_latents
 
