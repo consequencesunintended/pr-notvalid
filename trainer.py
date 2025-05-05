@@ -38,7 +38,7 @@ class Trainer:
         desired_effective_batch_size = 128
 
         # Assuming each GPU gets one item per step
-        self.local_batch_size = 4
+        self.local_batch_size = 1
 
         # Compute gradient accumulation steps dynamically
         self.gradient_accumulation_steps = desired_effective_batch_size // (num_gpus * self.local_batch_size)
@@ -127,22 +127,19 @@ class Trainer:
         return ds.state_dict() if hasattr(ds, "state_dict") else None
     
 
-    def evaluate(self, image, is_PIL=True):
+    def evaluate(self, image):
         with torch.no_grad():
             
-            if is_PIL:
-                image = image.convert("RGB")
-                image = image.resize((512, 512), resample=Image.BILINEAR)
+            image = image.convert("RGB")
+            image = image.resize((512, 512), resample=Image.BILINEAR)
 
-                # 1) convert and normalize
-                image_np     = np.array(image)                  # (H, W, 3)
-                image_tensor = torch.from_numpy(image_np).float() / 255.0
+            # 1) convert and normalize
+            image_np     = np.array(image)                  # (H, W, 3)
+            image_tensor = torch.from_numpy(image_np).float() / 255.0
 
-                # 2) move channels first & add batch dim
-                #    from (H, W, 3) → (3, H, W) → (1, 3, H, W)
-                image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0).to("cuda")
-            else:
-                image_tensor = image
+            # 2) move channels first & add batch dim
+            #    from (H, W, 3) → (3, H, W) → (1, 3, H, W)
+            image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0).to("cuda")
 
             rgb_latents = self.vae.encode(image_tensor).latent_dist.sample()
             rgb_latents = rgb_latents * self.vae.config.scaling_factor
@@ -279,69 +276,59 @@ class Trainer:
         for i, batch in enumerate(cycle(self.current_dataloader, stop_flag)):
 
             with self.accelerator.accumulate(self.model):
-                image       = batch["image"].to("cuda")
-                depth_image = batch["image_depth"].to("cuda")
-                bsz         = image.shape[0]
 
-                # --- 1) encode & prepare the two halves --------------------------------
+                with torch.no_grad():
+                    image = batch["image"].to("cuda")
+                    depth_image = batch["image_depth"].to("cuda")
 
-                # rgb latents (clean)
-                rgb_latents = self.vae.encode(image).latent_dist.sample()
-                rgb_latents = rgb_latents * self.vae.config.scaling_factor
 
-                # noisy latents (for reconstruction task)
-                noise = torch.randn_like(rgb_latents)
-                timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,), device="cuda",).long()
-                noisy_latents = self.noise_scheduler.add_noise(rgb_latents, noise, timesteps)
+                    rgb_latents = self.vae.encode(image).latent_dist.sample()
+                    rgb_latents = rgb_latents * self.vae.config.scaling_factor
 
-                # depth latents (annotation target)
-                depth_latents = self.vae.encode(depth_image).latent_dist.sample()
-                depth_latents = depth_latents * self.vae.config.scaling_factor
+                    bsz = rgb_latents.shape[0]
 
-                # stack them: first half = annotation task, second half = reconstruction task
-                input_latents = torch.cat([depth_latents, noisy_latents], dim=0)
+                    # Generate a batch of random probabilities, each in [0, 1)
+                    random_prob = torch.randint(0, 2, (bsz, 1)).float().to("cuda")
+                    task_emb = torch.cat([random_prob, 1 - random_prob], dim=1).float().to("cuda")
+                    task_emb = torch.cat([torch.sin(task_emb), torch.cos(task_emb)], dim=1)
 
-                # duplicate timesteps for both halves
-                timesteps = torch.cat([timesteps, timesteps], dim=0)
+                    # # Generate a batch of random probabilities, each in [0, 1)
+                    # random_prob = torch.ones((bsz, 1), dtype=torch.float32, device="cuda")
+                    # task_one  = torch.tensor([[1.0, 0.0]], device="cuda")  # annotate‑depth
+                    # task_one_emb = torch.cat([torch.sin(task_one), torch.cos(task_one)], dim=1)  # shape (1,4)
 
-                # --- 2) build task embeddings & text embeddings -------------------------
+                    # Sample a random timestep for each image
+                    fixed_timestep = self.noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
+                    timesteps = torch.full((bsz,), fixed_timestep, device=rgb_latents.device, dtype=torch.long)
 
-                # each half has its own 2‑D task ID
-                task_ids = torch.cat([
-                    torch.tensor([1, 0], device="cuda").unsqueeze(0).repeat(bsz, 1),
-                    torch.tensor([0, 1], device="cuda").unsqueeze(0).repeat(bsz, 1),
-                ], dim=0)  # (2*bsz, 2)
-
-                # sinusoidal expansion
-                task_emb = torch.cat([torch.sin(task_ids), torch.cos(task_ids)], dim=-1)
-
-                # prompt embeddings (also duplicated)
+                # 1) Tokenize:
                 input_ids = self.getEncodedPrompt("", bsz).to(self.text_encoder.device)
-                encoder_hidden = self.text_encoder(input_ids).last_hidden_state
-                encoder_hidden = torch.cat([encoder_hidden, encoder_hidden], dim=0)
 
-                # forward: get one big tensor
-                noise_pred_all, = self.model(
-                    input_latents,
-                    timesteps,
-                    encoder_hidden,
-                    class_labels=task_emb,
-                    return_dict=False
-                )  # noise_pred_all.shape == (2*bsz, C, H, W)
+                # 2) Get embeddings from the text encoder:
+                text_outputs = self.text_encoder(input_ids)
+                encoder_hidden_states = text_outputs.last_hidden_state  # shape (bsz, seq_len, hidden_size)
+                noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
 
-                # split first‐half vs second‐half
-                noise_pred_anno = noise_pred_all[:bsz]    # the “annotation” predictions
-                noise_pred_rec  = noise_pred_all[bsz:]    # the “reconstruction” predictions
+                scalar_timestep = timesteps[0].item()
+                self.noise_scheduler.set_timesteps(self.noise_scheduler.config.num_train_timesteps, device="cuda")
 
-                # --- 4) compute losses --------------------------------------------------
+                predicted_annotation_latents = noise_pred
+                image_reconstructed_latents = self.noise_scheduler.step(noise_pred, scalar_timestep, rgb_latents, return_dict=False)[0]
 
-                loss_anno = F1.mse_loss(noise_pred_anno, depth_latents, reduction="mean")
-                loss_rec  = F1.mse_loss(noise_pred_rec, noise, reduction="mean")
-                loss      = loss_anno + loss_rec
+                predicted_annotation = self.vae.decode(predicted_annotation_latents / self.vae.config.scaling_factor, return_dict=False)[0]
+                image_reconstructed = self.vae.decode(image_reconstructed_latents / self.vae.config.scaling_factor, return_dict=False)[0]
 
-                # backpropagate
+                # Compute per-pixel MSE losses without reduction
+                loss_pred_per_sample = F1.mse_loss(predicted_annotation, depth_image, reduction="mean")
+                loss_recon_per_sample = F1.mse_loss(image_reconstructed, image, reduction="mean")
+
+                # Combine the losses with your weights
+                weights = random_prob.squeeze()
+                weighted_loss = weights * loss_pred_per_sample + (1 - weights) * loss_recon_per_sample
+                loss = weighted_loss.mean()
+
                 self.accelerator.backward(loss)
-                      
+                
                 if self.accelerator.sync_gradients:
                     self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
                     
@@ -361,9 +348,21 @@ class Trainer:
                 if self.accelerator.is_main_process:
                     print(f'loss:{loss.item()} learning_rate:{self.scheduler.get_last_lr()[0]} step:{global_update}', flush=True)
 
+                    predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
+                    image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
+                    image_np = (image_np * 255).astype(np.uint8)
+                    im = Image.fromarray(image_np)
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
-                    self.evaluate(image, False).save(f'{output_dir}/depth_{global_update}_target.png')
+                    im.save(f'{output_dir}/depth_{global_update}_prediction.png')
+
+                    depth_image_np = (depth_image / 2 + 0.5).clamp(0, 1)
+                    image_np = depth_image_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
+                    image_np = (image_np * 255).astype(np.uint8)
+                    im = Image.fromarray(image_np)
+                    output_dir = "/root/output/images"
+                    os.makedirs(output_dir, exist_ok=True)
+                    im.save(f'{output_dir}/depth_{global_update}_target.png')
 
                     if global_update >= self.num_training_steps:  
                                                
