@@ -38,8 +38,7 @@ class CustomDataset(IterableDataset):
             new_height = 512
             scale = new_height / orig_height
             new_width = int(orig_width * scale)
-            new_width = 512
-            image = image.resize((512, 512), resample=Image.BILINEAR)
+            image = image.resize((new_width, new_height), resample=Image.BILINEAR)
             image_depth = image_depth.resize((new_width, new_height), resample=Image.BILINEAR)
             
             # Convert PIL images to NumPy arrays.
