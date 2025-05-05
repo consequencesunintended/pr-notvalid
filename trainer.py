@@ -307,7 +307,7 @@ class Trainer:
                 # 2) Get embeddings from the text encoder:
                 text_outputs = self.text_encoder(input_ids)
                 encoder_hidden_states = text_outputs.last_hidden_state  # shape (bsz, seq_len, hidden_size)
-                noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_one_emb, return_dict=False)[0]
+                noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
 
                 scalar_timestep = timesteps[0].item()
                 self.noise_scheduler.set_timesteps(self.noise_scheduler.config.num_train_timesteps, device="cuda")
