@@ -308,9 +308,9 @@ class Trainer:
                 # --- 2) build task embeddings & text embeddings -------------------------
 
                 # Get the task embedding
-                task_emb_anno = torch.tensor([1, 0]).float().unsqueeze(0).to(accelerator.device)
+                task_emb_anno = torch.tensor([1, 0]).float().unsqueeze(0).to("cuda")
                 task_emb_anno = torch.cat([torch.sin(task_emb_anno), torch.cos(task_emb_anno)], dim=-1).repeat(bsz, 1)
-                task_emb_rgb = torch.tensor([0, 1]).float().unsqueeze(0).to(accelerator.device)
+                task_emb_rgb = torch.tensor([0, 1]).float().unsqueeze(0).to("cuda")
                 task_emb_rgb = torch.cat([torch.sin(task_emb_rgb), torch.cos(task_emb_rgb)], dim=-1).repeat(bsz, 1)
                 task_emb = torch.cat((task_emb_anno, task_emb_rgb), dim=0)
 
