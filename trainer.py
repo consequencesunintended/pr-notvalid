@@ -64,6 +64,10 @@ class Trainer:
         self.unet = UNet2DConditionModel .from_pretrained(
             MODEL_ID, subfolder="unet", revision=None
         ).to("cuda")
+        
+        self.tokenizer = CLIPTokenizer.from_pretrained(
+            MODEL_ID, subfolder="tokenizer", revision=None
+        )
 
         self.checkpoint_path = "/root/output/checkpoint"
         os.makedirs(self.checkpoint_path, exist_ok=True)
@@ -81,18 +85,30 @@ class Trainer:
 
         self.optimizer = torch.optim.AdamW(self.unet.parameters(), lr=3e-5)
 
-        num_training_steps = 10000
-        num_warmup_steps = 500
+        self.num_training_steps = 10000
+        self.num_warmup_steps = 500
 
         self.scheduler = get_cosine_schedule_with_warmup(
             optimizer=self.optimizer,
-            num_warmup_steps=num_warmup_steps,
-            num_training_steps=num_training_steps
+            num_warmup_steps=self.num_warmup_steps,
+            num_training_steps=self.num_training_steps
         )
 
         self.model, self.vae, self.optimizer, self.current_dataloader, self.scheduler = self.accelerator.prepare(self.unet, self.vae, self.optimizer, data_loader, self.scheduler)
 
         self.save_per_updates = 300
+
+
+    def getEncodedPrompt(self, prompt, batch_size=1):
+        prompts = [prompt] * batch_size
+        # now tokenizer will return a tensor of shape (batch_size, seq_len)
+        return self.tokenizer(
+            prompts,
+            padding="do_not_pad",
+            max_length=self.tokenizer.model_max_length,
+            truncation=True,
+            return_tensors="pt",
+        ).input_ids
 
     @property
     def is_main(self):
@@ -268,7 +284,7 @@ class Trainer:
                     fixed_timestep = self.noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
                     timesteps = torch.full((bsz,), fixed_timestep, device=rgb_latents.device, dtype=torch.long)
 
-                encoder_hidden_states = self.text_encoder(batch["input_ids"], return_dict=False)[0]
+                encoder_hidden_states = self.getEncodedPrompt("", bsz)
                 noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
 
                 scalar_timestep = timesteps[0].item()
@@ -326,7 +342,7 @@ class Trainer:
                     os.makedirs(output_dir, exist_ok=True)
                     im.save(f'{output_dir}/lotus_depth_target_{global_update}.png')
 
-                    if i >= num_training_steps:  
+                    if global_update >= self.num_training_steps:  
                                                
                         stop_flag["force_stop"] = True  
 

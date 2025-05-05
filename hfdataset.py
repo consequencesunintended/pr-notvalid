@@ -1,4 +1,3 @@
-from transformers import CLIPTokenizer
 from torch.utils.data import IterableDataset
 import torch
 from datasets import load_dataset
@@ -8,20 +7,6 @@ from PIL import Image
 import io
 import numpy as np
 
-MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
-
-tokenizer = CLIPTokenizer.from_pretrained(
-    MODEL_ID, subfolder="tokenizer", revision=None
-)
-
-def getEncodedPrompt(prompt):
-    return tokenizer(
-                prompt,
-                padding="do_not_pad",
-                max_length=tokenizer.model_max_length,
-                truncation=True,
-                return_tensors="pt",
-            ).input_ids
 
 class CustomDataset(IterableDataset):
     def __init__(self, dataset, transform_image=None, transform_image_seg = None):
@@ -89,7 +74,6 @@ class CustomDataset(IterableDataset):
             yield {
                 "image": normalized_image,
                 "image_depth": normalized_depth,
-                "input_ids": getEncodedPrompt("")
             }
 
 
