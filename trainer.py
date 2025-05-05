@@ -93,8 +93,7 @@ class Trainer:
             num_training_steps=self.num_training_steps
         )
 
-        self.model, self.vae, self.optimizer, self.current_dataloader, self.scheduler = self.accelerator.prepare(self.unet, self.vae, self.optimizer, data_loader, self.scheduler)
-
+        self.model, self.optimizer, self.current_dataloader, self.scheduler = self.accelerator.prepare(self.unet, self.optimizer, data_loader, self.scheduler)
         self.save_per_updates = 300
 
 
