@@ -226,7 +226,7 @@ class Trainer:
         checkpoint = torch.load(path, map_location="cpu")
 
         # ————————————————————————————————————————————————————————————
-        # 3) Load model / optimizer / scheduler / EMA
+        # 3) Load model / optimizer / scheduler
         # ————————————————————————————————————————————————————————————
         # (these are identical on every rank)
         model_sd = checkpoint["model_state_dict"]
@@ -349,7 +349,7 @@ class Trainer:
                     im = Image.fromarray(image_np)
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
-                    im.save(f'{output_dir}/lotus_depth_prediction_{global_update}.png')
+                    im.save(f'{output_dir}/depth_{global_update}_prediction.png')
 
                     depth_image_np = (depth_image / 2 + 0.5).clamp(0, 1)
                     image_np = depth_image_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
@@ -357,7 +357,7 @@ class Trainer:
                     im = Image.fromarray(image_np)
                     output_dir = "/root/output/images"
                     os.makedirs(output_dir, exist_ok=True)
-                    im.save(f'{output_dir}/lotus_depth_target_{global_update}.png')
+                    im.save(f'{output_dir}/depth_{global_update}_target.png')
 
                     if global_update >= self.num_training_steps:  
                                                
@@ -373,4 +373,3 @@ class Trainer:
             torch.distributed.destroy_process_group()
 
         raise Exception("Training complete")   
-
