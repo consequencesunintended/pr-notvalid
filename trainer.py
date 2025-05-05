@@ -17,6 +17,83 @@ from torch.distributed import all_gather_object, barrier
 MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
 
 class Trainer:
+
+    def __init__(self):
+        multiprocessing.set_start_method("spawn", force=True)
+
+        ddp_kwargs = DistributedDataParallelKwargs()
+
+        # Initialize the Accelerator for distributed training
+        dataloader_config = DataLoaderConfiguration(
+            dispatch_batches=False,
+            split_batches=False,
+        )
+
+        # Initialize Accelerator
+        self.accelerator = Accelerator()
+
+        # Number of GPUs or processes
+        num_gpus = self.accelerator.num_processes
+
+        # Desired effective batch size
+        desired_effective_batch_size = 128
+
+        # Assuming each GPU gets one item per step
+        self.local_batch_size = 1
+
+        # Compute gradient accumulation steps dynamically
+        self.gradient_accumulation_steps = desired_effective_batch_size // (num_gpus * self.local_batch_size)
+
+        # Now, initialize your Accelerator with the computed self.gradient_accumulation_steps
+        self.accelerator = Accelerator(
+            dataloader_config=dataloader_config,
+            kwargs_handlers=[ddp_kwargs],
+            gradient_accumulation_steps=self.gradient_accumulation_steps,
+        )
+        print(f"Using {num_gpus} GPUs with self.gradient_accumulation_steps set to {self.gradient_accumulation_steps}")
+
+
+        self.noise_scheduler = DDIMScheduler.from_pretrained(MODEL_ID, subfolder="scheduler")
+
+        self.text_encoder = CLIPTextModel.from_pretrained(
+            MODEL_ID, subfolder="text_encoder", revision=None
+        ).to("cuda")
+        self.vae = AutoencoderKL.from_pretrained(
+            MODEL_ID, subfolder="vae", revision=None
+        ).to("cuda")
+        self.unet = UNet2DConditionModel .from_pretrained(
+            MODEL_ID, subfolder="unet", revision=None
+        ).to("cuda")
+
+        self.checkpoint_path = "/root/output/checkpoint"
+        os.makedirs(self.checkpoint_path, exist_ok=True)
+
+        train_dataset = load_hf_dataset(self.accelerator.num_processes, self.accelerator.process_index)
+
+        data_loader = DataLoader(train_dataset, 
+                                batch_size=self.local_batch_size,
+                                num_workers=min(train_dataset.num_shards,2),
+                                pin_memory=True,
+                                persistent_workers=True,)
+
+        if self.accelerator.is_local_main_process:
+            print("Data Prepared!")
+
+        self.optimizer = torch.optim.AdamW(self.unet.parameters(), lr=3e-5)
+
+        num_training_steps = 10000
+        num_warmup_steps = 500
+
+        self.scheduler = get_cosine_schedule_with_warmup(
+            optimizer=self.optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_training_steps
+        )
+
+        self.model, self.vae, self.optimizer, self.current_dataloader, self.scheduler = self.accelerator.prepare(self.unet, self.vae, self.optimizer, data_loader, self.scheduler)
+
+        self.save_per_updates = 300
+
     @property
     def is_main(self):
         return self.accelerator.is_main_process
@@ -34,6 +111,38 @@ class Trainer:
         ds = self._unwrap_dataset(self.current_dataloader.dataset)
 
         return ds.state_dict() if hasattr(ds, "state_dict") else None
+    
+
+    def evaluate(self, image, input_ids):
+        with torch.no_grad():
+
+            rgb_latents = self.vae.encode(image).latent_dist.sample()
+            rgb_latents = rgb_latents * self.vae.config.scaling_factor
+
+            bsz = rgb_latents.shape[0]
+
+            # Generate a batch of random probabilities, each in [0, 1)
+            random_prob = torch.randint(0, 2, (bsz, 1)).float().to("cuda")
+            task_emb = torch.cat([random_prob, 1 - random_prob], dim=1).float().to("cuda")
+            task_emb = torch.cat([torch.sin(task_emb), torch.cos(task_emb)], dim=1)
+
+            # Sample a random timestep for each image
+            fixed_timestep = self.noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
+            timesteps = torch.full((bsz,), fixed_timestep, device=rgb_latents.device, dtype=torch.long)
+
+            encoder_hidden_states = self.text_encoder(input_ids, return_dict=False)[0]
+            noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
+
+            scalar_timestep = timesteps[0].item()
+
+            image_reconstructed_latents = self.noise_scheduler.step(noise_pred, scalar_timestep, rgb_latents, return_dict=False)[0]
+            image_reconstructed = self.vae.decode(image_reconstructed_latents / self.vae.config.scaling_factor, return_dict=False)[0]
+            predicted_np = (image_reconstructed / 2 + 0.5).clamp(0, 1)
+            image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
+            image_np = (image_np * 255).astype(np.uint8)
+            im = Image.fromarray(image_np)
+
+            return im
 
     def save_checkpoint(self, update, last=False):
         self.accelerator.wait_for_everyone()
@@ -117,115 +226,13 @@ class Trainer:
         return checkpoint.get("update", 0)
 
     def train(self):
-        multiprocessing.set_start_method("spawn", force=True)
 
-        ddp_kwargs = DistributedDataParallelKwargs()
-
-        # Initialize the Accelerator for distributed training
-        dataloader_config = DataLoaderConfiguration(
-            dispatch_batches=False,
-            split_batches=False,
-        )
-
-        # Initialize Accelerator
-        self.accelerator = Accelerator()
-
-        # Number of GPUs or processes
-        num_gpus = self.accelerator.num_processes
-
-        # Desired effective batch size
-        desired_effective_batch_size = 128
-
-        # Assuming each GPU gets one item per step
-        local_batch_size = 1
-
-        # Compute gradient accumulation steps dynamically
-        gradient_accumulation_steps = desired_effective_batch_size // (num_gpus * local_batch_size)
-
-        # Now, initialize your Accelerator with the computed gradient_accumulation_steps
-        self.accelerator = Accelerator(
-            dataloader_config=dataloader_config,
-            kwargs_handlers=[ddp_kwargs],
-            gradient_accumulation_steps=gradient_accumulation_steps,
-        )
-        print(f"Using {num_gpus} GPUs with gradient_accumulation_steps set to {gradient_accumulation_steps}")
-
-
-        noise_scheduler = DDIMScheduler.from_pretrained(MODEL_ID, subfolder="scheduler")
-        tokenizer = CLIPTokenizer.from_pretrained(
-            MODEL_ID, subfolder="tokenizer", revision=None
-        )
-        text_encoder = CLIPTextModel.from_pretrained(
-            MODEL_ID, subfolder="text_encoder", revision=None
-        ).to("cuda")
-        vae = AutoencoderKL.from_pretrained(
-            MODEL_ID, subfolder="vae", revision=None
-        ).to("cuda")
-        unet = UNet2DConditionModel.from_pretrained(
-            MODEL_ID, subfolder="unet", revision=None
-        ).to("cuda")
-        
-        train_dataset = load_hf_dataset(self.accelerator.num_processes, self.accelerator.process_index)
-
-        data_loader = DataLoader(train_dataset, 
-                                batch_size=local_batch_size,
-                                num_workers=min(train_dataset.num_shards,2),
-                                pin_memory=True,
-                                persistent_workers=True,)
-
-        prompt = ""
-        uncond_tokens = ""
-
-        text_inputs = tokenizer(
-                    prompt,
-                    padding="max_length",
-                    max_length=tokenizer.model_max_length,
-                    truncation=True,
-                    return_tensors="pt",
-                ).input_ids.to("cuda")
-        prompt_embeds = text_encoder(text_inputs, attention_mask=None)[0]
-
-        max_length = prompt_embeds.shape[1]
-        uncond_input = tokenizer(
-            uncond_tokens,
-            padding="max_length",
-            max_length=max_length,
-            truncation=True,
-            return_tensors="pt").input_ids.to("cuda")
-        negative_prompt_embeds = text_encoder(uncond_input, attention_mask=None)[0]
-
-        prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-
-        vae.requires_grad_(False)
-        text_encoder.requires_grad_(False)
-        unet.train()
-
-        if self.accelerator.is_local_main_process:
-            print("Data Prepared!")
-
-        self.optimizer = torch.optim.AdamW(unet.parameters(), lr=3e-5)
-
-        num_training_steps = 10000
-        num_warmup_steps = 500
-
-        self.scheduler = get_cosine_schedule_with_warmup(
-            optimizer=self.optimizer,
-            num_warmup_steps=num_warmup_steps,
-            num_training_steps=num_training_steps
-        )
-
-        unet, vae, self.optimizer, data_loader, self.scheduler = self.accelerator.prepare(unet, vae, self.optimizer, data_loader, self.scheduler)
-
-        self.current_dataloader = data_loader
-        self.model = unet
-        self.save_per_updates = 300
-
-        self.checkpoint_path = "/root/output/checkpoint"
-        os.makedirs(self.checkpoint_path, exist_ok=True)
-        
         start_update = self.load_checkpoint()
         global_update = start_update
 
+        self.vae.requires_grad_(False)
+        self.text_encoder.requires_grad_(False)
+        self.unet.train()
 
         stop_flag = {"force_stop": False}
 
@@ -247,10 +254,10 @@ class Trainer:
                     depth_image = batch["image_depth"].to("cuda")
 
 
-                    x_0 = vae.encode(image).latent_dist.sample()
-                    x_0 = x_0 * vae.config.scaling_factor
+                    rgb_latents = self.vae.encode(image).latent_dist.sample()
+                    rgb_latents = rgb_latents * self.vae.config.scaling_factor
 
-                    bsz = x_0.shape[0]
+                    bsz = rgb_latents.shape[0]
 
                     # Generate a batch of random probabilities, each in [0, 1)
                     random_prob = torch.randint(0, 2, (bsz, 1)).float().to("cuda")
@@ -258,25 +265,20 @@ class Trainer:
                     task_emb = torch.cat([torch.sin(task_emb), torch.cos(task_emb)], dim=1)
 
                     # Sample a random timestep for each image
-                    fixed_timestep = noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
-                    timesteps = torch.full((bsz,), fixed_timestep, device=x_0.device, dtype=torch.long)
+                    fixed_timestep = self.noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
+                    timesteps = torch.full((bsz,), fixed_timestep, device=rgb_latents.device, dtype=torch.long)
 
-                    rgb_latents = x_0
-
-                latent_model_input = rgb_latents
-
-                encoder_hidden_states = text_encoder(batch["input_ids"], return_dict=False)[0]
-                noise_pred = self.model(latent_model_input, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
+                encoder_hidden_states = self.text_encoder(batch["input_ids"], return_dict=False)[0]
+                noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
 
                 scalar_timestep = timesteps[0].item()
-                noise_scheduler.set_timesteps(noise_scheduler.config.num_train_timesteps, device="cuda")
+                self.noise_scheduler.set_timesteps(self.noise_scheduler.config.num_train_timesteps, device="cuda")
 
                 predicted_annotation_latents = noise_pred
-                image_reconstructed_latents = noise_scheduler.step(noise_pred, scalar_timestep, rgb_latents, return_dict=False)[0]
+                image_reconstructed_latents = self.noise_scheduler.step(noise_pred, scalar_timestep, rgb_latents, return_dict=False)[0]
 
-                predicted_annotation = vae.decode(predicted_annotation_latents / vae.config.scaling_factor, return_dict=False)[0]
-
-                image_reconstructed = vae.decode(image_reconstructed_latents / vae.config.scaling_factor, return_dict=False)[0]
+                predicted_annotation = self.vae.decode(predicted_annotation_latents / self.vae.config.scaling_factor, return_dict=False)[0]
+                image_reconstructed = self.vae.decode(image_reconstructed_latents / self.vae.config.scaling_factor, return_dict=False)[0]
 
                 # Compute per-pixel MSE losses without reduction
                 loss_pred_per_sample = F1.mse_loss(predicted_annotation, depth_image, reduction="mean")
@@ -304,7 +306,6 @@ class Trainer:
                 self.save_checkpoint(global_update, last=True)
 
             if self.accelerator.sync_gradients:                
-                reduced_loss = self.accelerator.reduce(loss, reduction="mean")
 
                 if self.accelerator.is_main_process:
                     print(f'loss:{loss.item()} learning_rate:{self.scheduler.get_last_lr()[0]} step:{global_update}', flush=True)
