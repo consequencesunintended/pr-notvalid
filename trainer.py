@@ -4,7 +4,6 @@ import torch
 import numpy as np
 import torch.nn.functional as F1
 from torch.utils.data import DataLoader
-import gc
 import os
 from hfdataset import load_hf_dataset
 from accelerate import Accelerator, DataLoaderConfiguration
@@ -129,31 +128,45 @@ class Trainer:
         return ds.state_dict() if hasattr(ds, "state_dict") else None
     
 
-    def evaluate(self, image, input_ids):
+    def evaluate(self, image):
         with torch.no_grad():
+            
+            image = image.convert("RGB")
+            image = image.resize((512, 512), resample=Image.BILINEAR)
 
-            rgb_latents = self.vae.encode(image).latent_dist.sample()
+            # 1) convert and normalize
+            image_np     = np.array(image)                  # (H, W, 3)
+            image_tensor = torch.from_numpy(image_np).float() / 255.0
+
+            # 2) move channels first & add batch dim
+            #    from (H, W, 3) → (3, H, W) → (1, 3, H, W)
+            image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0).to("cuda")
+
+            rgb_latents = self.vae.encode(image_tensor).latent_dist.sample()
             rgb_latents = rgb_latents * self.vae.config.scaling_factor
 
             bsz = rgb_latents.shape[0]
 
             # Generate a batch of random probabilities, each in [0, 1)
-            random_prob = torch.randint(0, 2, (bsz, 1)).float().to("cuda")
-            task_emb = torch.cat([random_prob, 1 - random_prob], dim=1).float().to("cuda")
-            task_emb = torch.cat([torch.sin(task_emb), torch.cos(task_emb)], dim=1)
+            task_one  = torch.tensor([[1.0, 0.0]], device="cuda")  # annotate‑depth
+            task_one_emb = torch.cat([torch.sin(task_one), torch.cos(task_one)], dim=1)  # shape (1,4)
 
             # Sample a random timestep for each image
             fixed_timestep = self.noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
             timesteps = torch.full((bsz,), fixed_timestep, device=rgb_latents.device, dtype=torch.long)
 
-            encoder_hidden_states = self.text_encoder(input_ids, return_dict=False)[0]
-            noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
+            # 1) Tokenize:
+            input_ids = self.getEncodedPrompt("", bsz).to(self.text_encoder.device)
 
-            scalar_timestep = timesteps[0].item()
+            # 2) Get embeddings from the text encoder:
+            text_outputs = self.text_encoder(input_ids)
+            encoder_hidden_states = text_outputs.last_hidden_state  # shape (bsz, seq_len, hidden_size)
 
-            image_reconstructed_latents = self.noise_scheduler.step(noise_pred, scalar_timestep, rgb_latents, return_dict=False)[0]
-            image_reconstructed = self.vae.decode(image_reconstructed_latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            predicted_np = (image_reconstructed / 2 + 0.5).clamp(0, 1)
+            noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_one_emb, return_dict=False)[0]
+
+            predicted_annotation_latents = noise_pred
+            predicted_annotation = self.vae.decode(predicted_annotation_latents / self.vae.config.scaling_factor, return_dict=False)[0]
+            predicted_np = (predicted_annotation / 2 + 0.5).clamp(0, 1)
             image_np = predicted_np[0].float().permute(1, 2, 0).detach().cpu().numpy()
             image_np = (image_np * 255).astype(np.uint8)
             im = Image.fromarray(image_np)
@@ -284,7 +297,12 @@ class Trainer:
                     fixed_timestep = self.noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
                     timesteps = torch.full((bsz,), fixed_timestep, device=rgb_latents.device, dtype=torch.long)
 
-                encoder_hidden_states = self.getEncodedPrompt("", bsz)
+                # 1) Tokenize:
+                input_ids = self.getEncodedPrompt("", bsz).to(self.text_encoder.device)
+
+                # 2) Get embeddings from the text encoder:
+                text_outputs = self.text_encoder(input_ids)
+                encoder_hidden_states = text_outputs.last_hidden_state  # shape (bsz, seq_len, hidden_size)
                 noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
 
                 scalar_timestep = timesteps[0].item()
