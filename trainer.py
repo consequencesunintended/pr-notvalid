@@ -94,7 +94,7 @@ class Trainer:
         )
 
         self.model, self.optimizer, self.current_dataloader, self.scheduler = self.accelerator.prepare(self.unet, self.optimizer, data_loader, self.scheduler)
-        self.save_per_updates = 300
+        self.save_per_updates = 100
 
 
     def getEncodedPrompt(self, prompt, batch_size=1):
