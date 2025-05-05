@@ -287,10 +287,14 @@ class Trainer:
 
                     bsz = rgb_latents.shape[0]
 
+                    # # Generate a batch of random probabilities, each in [0, 1)
+                    # random_prob = torch.randint(0, 2, (bsz, 1)).float().to("cuda")
+                    # task_emb = torch.cat([random_prob, 1 - random_prob], dim=1).float().to("cuda")
+                    # task_emb = torch.cat([torch.sin(task_emb), torch.cos(task_emb)], dim=1)
+
                     # Generate a batch of random probabilities, each in [0, 1)
-                    random_prob = torch.randint(0, 2, (bsz, 1)).float().to("cuda")
-                    task_emb = torch.cat([random_prob, 1 - random_prob], dim=1).float().to("cuda")
-                    task_emb = torch.cat([torch.sin(task_emb), torch.cos(task_emb)], dim=1)
+                    task_one  = torch.tensor([[1.0, 0.0]], device="cuda")  # annotate‑depth
+                    task_one_emb = torch.cat([torch.sin(task_one), torch.cos(task_one)], dim=1)  # shape (1,4)
 
                     # Sample a random timestep for each image
                     fixed_timestep = self.noise_scheduler.config.num_train_timesteps - 1  # assuming 0-indexing
@@ -302,7 +306,7 @@ class Trainer:
                 # 2) Get embeddings from the text encoder:
                 text_outputs = self.text_encoder(input_ids)
                 encoder_hidden_states = text_outputs.last_hidden_state  # shape (bsz, seq_len, hidden_size)
-                noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_emb, return_dict=False)[0]
+                noise_pred = self.model(rgb_latents, timesteps, encoder_hidden_states, class_labels=task_one_emb, return_dict=False)[0]
 
                 scalar_timestep = timesteps[0].item()
                 self.noise_scheduler.set_timesteps(self.noise_scheduler.config.num_train_timesteps, device="cuda")
