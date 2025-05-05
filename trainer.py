@@ -293,6 +293,7 @@ class Trainer:
                     # task_emb = torch.cat([torch.sin(task_emb), torch.cos(task_emb)], dim=1)
 
                     # Generate a batch of random probabilities, each in [0, 1)
+                    random_prob = torch.ones((bsz, 1), dtype=torch.float32, device="cuda")
                     task_one  = torch.tensor([[1.0, 0.0]], device="cuda")  # annotate‑depth
                     task_one_emb = torch.cat([torch.sin(task_one), torch.cos(task_one)], dim=1)  # shape (1,4)
 
