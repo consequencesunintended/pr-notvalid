@@ -8,7 +8,7 @@ import io
 import numpy as np
 
 
-class CustomDataset(IterableDataset):
+class HFDataset(IterableDataset):
     def __init__(self, dataset, transform_image=None, transform_image_seg = None):
         self.dataset = dataset
         self.transform_image = transform_image
@@ -81,6 +81,6 @@ class CustomDataset(IterableDataset):
 
 def load_hf_dataset(num_processes, process_index):
     ds_shard = load_dataset("alexnasa/hypersim-depth", split="train", streaming=True).shard(num_processes, process_index)
-    train_dataset = CustomDataset(ds_shard)
+    train_dataset = HFDataset(ds_shard)
     
     return train_dataset
